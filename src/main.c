@@ -10,16 +10,18 @@
 #define RING_THICK          5     // px
 #define RING_GAP            3     // px gap between ring and content
 
-// Rect layout
+// Rect layout — bars hug opposite edges, labels between bar and edge.
+// Left bar:  [ring_inset] [LABEL_W] [TICK_LEN] [BAR_W] ...
+// Right bar: ... [BAR_W] [TICK_LEN] [LABEL_W] [ring_inset]
+// The large gap between the two bars is intentional (it's most of the screen).
 #define DATE_HEIGHT         22
 #define BAR_MARGIN_TOP      4
 #define BAR_MARGIN_BOTTOM   4
-#define BAR_WIDTH           28    // wider bars
-#define BAR_GAP             12
-#define TICK_LEN            5
-#define LABEL_W             26
+#define BAR_W               30    // matches v1 measured width
+#define LABEL_W             26    // label column width
+#define TICK_LEN            5     // tick line length outside bar
 
-// Round layout
+// Round layout — bars centered, labels+ticks extend to circle edge
 #define ROUND_BAR_W         24
 #define ROUND_BAR_GAP       10
 #define ROUND_TICK_MARGIN   28
@@ -247,35 +249,35 @@ static void draw_ring_round(GContext *ctx, GRect bounds) {
 
 // ============================================================
 // DRAW BAR WITH SEPARATOR TICKS
-// Draws a dim track, then lit fill, then redraws tick lines
-// across the full bar width in bg color — so ticks appear as
-// background-colored separators through both dim and lit regions.
+// Draws dim track, lit fill, then bg-colored lines across the
+// full bar width at each tick position — visible as separators
+// through both the dim and lit regions.
 // ============================================================
 static void draw_bar_with_ticks(GContext *ctx,
-                                int bar_x, int bar_y, int bar_w, int bar_h,
+                                int bar_x, int bar_top, int bar_w, int bar_h,
                                 int lit_px,
                                 int *tick_ys, int tick_count) {
-  // Dim track
   graphics_context_set_fill_color(ctx, eff_dim());
-  graphics_fill_rect(ctx, GRect(bar_x, bar_y, bar_w, bar_h), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(bar_x, bar_top, bar_w, bar_h), 0, GCornerNone);
 
-  // Lit fill (grows upward from bottom)
   if (lit_px > 0) {
     graphics_context_set_fill_color(ctx, eff_lit());
-    graphics_fill_rect(ctx, GRect(bar_x, bar_y + bar_h - lit_px, bar_w, lit_px), 0, GCornerNone);
+    graphics_fill_rect(ctx, GRect(bar_x, bar_top + bar_h - lit_px, bar_w, lit_px), 0, GCornerNone);
   }
 
-  // Separator ticks: bg-colored lines across the full bar width
   graphics_context_set_stroke_color(ctx, eff_bg());
   graphics_context_set_stroke_width(ctx, 1);
   for (int i = 0; i < tick_count; i++) {
-    int ty = tick_ys[i];
-    graphics_draw_line(ctx, GPoint(bar_x, ty), GPoint(bar_x + bar_w - 1, ty));
+    graphics_draw_line(ctx, GPoint(bar_x, tick_ys[i]), GPoint(bar_x + bar_w - 1, tick_ys[i]));
   }
 }
 
 // ============================================================
 // DRAW — RECT PLATFORMS
+// Layout matches v1: bars hug opposite screen edges.
+// Left bar at left edge: [ring] [label] [tick] [BAR]
+// Right bar at right edge:      [BAR] [tick] [label] [ring]
+// Large open gap in the center between bars.
 // ============================================================
 #if !defined(PBL_ROUND)
 static void draw_rect(GContext *ctx, GRect bounds) {
@@ -283,26 +285,26 @@ static void draw_rect(GContext *ctx, GRect bounds) {
   int h = bounds.size.h;
 
   bool show_ring = s_settings.ShowRing;
-  // Ring inset applies to ALL four sides
-  int ring_inset = show_ring ? (RING_THICK + RING_GAP) : 0;
+  int ri = show_ring ? (RING_THICK + RING_GAP) : 0;  // ring inset all sides
 
-  // Date strip at bottom, above the ring
-  int date_y     = h - ring_inset - DATE_HEIGHT;
-  int bar_top    = ring_inset + BAR_MARGIN_TOP;
+  // Vertical extents
+  int date_y     = h - ri - DATE_HEIGHT;
+  int bar_top    = ri + BAR_MARGIN_TOP;
   int bar_bottom = date_y - BAR_MARGIN_BOTTOM;
   int bar_h      = bar_bottom - bar_top;
   if (bar_h < 10) bar_h = 10;
 
-  int assembly_w = LABEL_W + TICK_LEN + BAR_WIDTH + BAR_GAP + BAR_WIDTH + TICK_LEN + LABEL_W;
-  int asm_x      = (w - assembly_w) / 2;
-  int lbl_l_x    = asm_x;
-  int ltick_x    = lbl_l_x + LABEL_W;
-  int lbar_x     = ltick_x + TICK_LEN;
-  int rbar_x     = lbar_x + BAR_WIDTH + BAR_GAP;
-  int rtick_x    = rbar_x + BAR_WIDTH;
-  int lbl_r_x    = rtick_x + TICK_LEN;
+  // Horizontal positions — left bar hugs left, right bar hugs right
+  int lbar_x  = ri + LABEL_W + TICK_LEN;          // left bar left edge
+  int ltick_x = ri + LABEL_W;                      // left tick right edge (butts bar)
+  int lbl_l_x = ri;                                // left label left edge
+
+  int rbar_x  = w - ri - LABEL_W - TICK_LEN - BAR_W; // right bar left edge
+  int rtick_x = rbar_x + BAR_W;                       // right tick left edge
+  int lbl_r_x = rtick_x + TICK_LEN;                   // right label left edge
 
   bool is_24h = s_settings.Show24h;
+  int total_h = is_24h ? 24 : 12;
 
   // ---- Hour bar ----
   int hour_px;
@@ -314,8 +316,6 @@ static void draw_rect(GContext *ctx, GRect bounds) {
     hour_px = bar_h * disp / 12;
   }
 
-  // Build hour tick y positions
-  int total_h = is_24h ? 24 : 12;
   int hour_ticks[24];
   for (int hr = 1; hr <= total_h; hr++) {
     hour_ticks[hr-1] = is_24h
@@ -323,17 +323,17 @@ static void draw_rect(GContext *ctx, GRect bounds) {
       : (bar_bottom - bar_h * hr / 12);
   }
 
-  draw_bar_with_ticks(ctx, lbar_x, bar_top, BAR_WIDTH, bar_h, hour_px, hour_ticks, total_h);
+  draw_bar_with_ticks(ctx, lbar_x, bar_top, BAR_W, bar_h, hour_px, hour_ticks, total_h);
 
-  // 24h midpoint notch (AM/PM separator on top of everything)
+  // 24h AM/PM notch — slightly thicker to stand out
   if (is_24h) {
     int notch_y = bar_bottom - bar_h / 2;
     graphics_context_set_stroke_color(ctx, eff_bg());
     graphics_context_set_stroke_width(ctx, 2);
-    graphics_draw_line(ctx, GPoint(lbar_x, notch_y), GPoint(lbar_x + BAR_WIDTH - 1, notch_y));
+    graphics_draw_line(ctx, GPoint(lbar_x, notch_y), GPoint(lbar_x + BAR_W - 1, notch_y));
   }
 
-  // Hour tick lines and labels (left side, outside bar)
+  // Hour labels and ticks (left of bar)
   graphics_context_set_stroke_color(ctx, eff_text());
   graphics_context_set_stroke_width(ctx, 1);
   graphics_context_set_text_color(ctx, eff_text());
@@ -355,14 +355,13 @@ static void draw_rect(GContext *ctx, GRect bounds) {
 
   int min_ticks[12];
   for (int i = 0; i < 12; i++) {
-    int mn = (i + 1) * 5;
-    int mn_src = (mn == 60) ? 59 : mn;
+    int mn_src = ((i + 1) * 5 == 60) ? 59 : (i + 1) * 5;
     min_ticks[i] = bar_bottom - bar_h * mn_src / 59;
   }
 
-  draw_bar_with_ticks(ctx, rbar_x, bar_top, BAR_WIDTH, bar_h, min_px, min_ticks, 12);
+  draw_bar_with_ticks(ctx, rbar_x, bar_top, BAR_W, bar_h, min_px, min_ticks, 12);
 
-  // Minute tick lines and labels (right side, outside bar)
+  // Minute labels and ticks (right of bar)
   graphics_context_set_stroke_color(ctx, eff_text());
   graphics_context_set_text_color(ctx, eff_text());
   for (int i = 0; i < 12; i++) {
@@ -390,6 +389,8 @@ static void draw_rect(GContext *ctx, GRect bounds) {
 
 // ============================================================
 // DRAW — ROUND PLATFORMS
+// Two centered bars with ticks extending to circle boundary.
+// Labels near circle edge. Date below bars.
 // ============================================================
 #if defined(PBL_ROUND)
 static void draw_round(GContext *ctx, GRect bounds) {
@@ -414,6 +415,7 @@ static void draw_round(GContext *ctx, GRect bounds) {
   int rbar_x = cx + ROUND_BAR_GAP / 2;
 
   bool is_24h = s_settings.Show24h;
+  int total_h = is_24h ? 24 : 12;
 
   // ---- Hour bar ----
   int hour_px;
@@ -425,7 +427,6 @@ static void draw_round(GContext *ctx, GRect bounds) {
     hour_px = bar_h * disp / 12;
   }
 
-  int total_h = is_24h ? 24 : 12;
   int hour_ticks[24];
   for (int hr = 1; hr <= total_h; hr++) {
     hour_ticks[hr-1] = is_24h
@@ -447,14 +448,13 @@ static void draw_round(GContext *ctx, GRect bounds) {
 
   int min_ticks[12];
   for (int i = 0; i < 12; i++) {
-    int mn = (i + 1) * 5;
-    int mn_src = (mn == 60) ? 59 : mn;
+    int mn_src = ((i + 1) * 5 == 60) ? 59 : (i + 1) * 5;
     min_ticks[i] = bar_bottom - bar_h * mn_src / 59;
   }
 
   draw_bar_with_ticks(ctx, rbar_x, bar_top, ROUND_BAR_W, bar_h, min_px, min_ticks, 12);
 
-  // ---- Ticks and labels (outside bars, toward circle edge) ----
+  // ---- Ticks and labels toward circle edge ----
   graphics_context_set_stroke_width(ctx, 1);
   graphics_context_set_text_color(ctx, eff_text());
 
