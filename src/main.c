@@ -5,39 +5,44 @@
 // ============================================================
 #define SETTINGS_KEY        1
 #define DEFAULT_STEP_GOAL   10000
-#define RING_THICK          5     // outer ring thickness px
-#define RING_GAP            3     // gap between ring and bars
-#define DATE_HEIGHT         22    // px reserved at bottom for date (rect only)
-#define BAR_MARGIN_TOP      6     // px from top edge to bar top (rect)
-#define BAR_MARGIN_BOTTOM   4     // px from date strip to bar bottom (rect)
-#define BAR_WIDTH           20    // px width of each bar (rect)
-#define BAR_GAP             12    // px gap between the two bars (rect)
-#define TICK_LEN            5     // px length of tick marks (rect)
-#define LABEL_W             26    // px width of label column (rect)
 
-// Round-specific
-// Bars are radial spokes emanating from a central hub.
-// Hours on bottom semicircle, minutes on top.
-// Labels ride the outer edge of the spoke field.
-#define SPOKE_INNER_R       28    // px from center where spoke starts
-#define SPOKE_OUTER_INSET   30    // px short of screen edge where spoke ends (inside label ring)
-#define SPOKE_LABEL_INSET   14    // px from edge for label center
+// Outer ring
+#define RING_THICK          5     // px
+#define RING_GAP            3     // px gap between ring and content
+
+// Rect layout
+#define DATE_HEIGHT         22
+#define BAR_MARGIN_TOP      6
+#define BAR_MARGIN_BOTTOM   4
+#define BAR_WIDTH           20
+#define BAR_GAP             12
+#define TICK_LEN            5
+#define LABEL_W             26
+
+// Round layout — same two-bar concept, clipped to circle.
+// Bars are vertical and centered. Ticks extend horizontally
+// toward the circle boundary, stopping ROUND_TICK_MARGIN px short.
+// Labels sit just inside the circle edge.
+#define ROUND_BAR_W         18    // px width of each bar
+#define ROUND_BAR_GAP       10    // px gap between bars
+#define ROUND_TICK_MARGIN   28    // px from circle edge where tick line ends
+#define ROUND_LABEL_MARGIN  14    // px from circle edge to center of label
 
 // ============================================================
 // SETTINGS
 // ============================================================
 typedef struct {
   GColor BackgroundColor;
-  GColor BarLitColor;      // filled portion of both bars
-  GColor BarDimColor;      // empty track of both bars
+  GColor BarLitColor;
+  GColor BarDimColor;
   GColor DateTextColor;
-  GColor RingBattColor;    // ring lit: battery
-  GColor RingStepsColor;   // ring lit: steps
-  GColor RingDimColor;     // ring empty track
+  GColor RingBattColor;
+  GColor RingStepsColor;
+  GColor RingDimColor;
   int  StepGoal;
   bool ShowRing;
-  bool InvertBW;           // B&W only
-  bool Show24h;            // show AM/PM notch on rect hour bar
+  bool InvertBW;
+  bool Show24h;
 } BarSettings;
 
 static BarSettings s_settings;
@@ -78,7 +83,18 @@ static int  s_steps   = 0;
 static char s_date_buf[20];
 
 // ============================================================
-// HELPERS — effective colors (B&W invert handled here)
+// INTEGER SQRT (Pebble SDK has no math.h sqrt in C)
+// ============================================================
+static int prv_isqrt(int n) {
+  if (n <= 0) return 0;
+  int x = n;
+  int y = (x + 1) / 2;
+  while (y < x) { x = y; y = (x + n / x) / 2; }
+  return x;
+}
+
+// ============================================================
+// EFFECTIVE COLORS
 // ============================================================
 static GColor eff_bg(void) {
 #if defined(PBL_BW)
@@ -131,6 +147,112 @@ static GColor eff_ring_dim(void) {
 }
 
 // ============================================================
+// OUTER RING — RECT
+// Battery: right half. Steps: left half. Both track from bottom-center outward.
+// ============================================================
+#if !defined(PBL_ROUND)
+static void draw_ring_rect(GContext *ctx, int w, int h) {
+  int step_pct = (s_settings.StepGoal > 0)
+    ? (s_steps * 100 / s_settings.StepGoal) : 0;
+  if (step_pct > 100) step_pct = 100;
+
+  int t   = RING_THICK;
+  int gap = 5;
+  int cx  = w / 2;
+  int hw  = cx - gap;
+  int total = hw + h + hw;
+
+  graphics_context_set_fill_color(ctx, eff_bg());
+  graphics_fill_rect(ctx, GRect(0,   0,   w, t), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(0,   h-t, w, t), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(0,   0,   t, h), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(w-t, 0,   t, h), 0, GCornerNone);
+
+  // Battery dim track
+  graphics_context_set_fill_color(ctx, eff_ring_dim());
+  graphics_fill_rect(ctx, GRect(cx+gap, h-t, hw, t), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(w-t,    0,   t,  h), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(cx+gap, 0,   hw, t), 0, GCornerNone);
+  // Battery fill
+  {
+    int filled = total * s_battery / 100;
+    graphics_context_set_fill_color(ctx, eff_ring_batt());
+    if (filled > 0) {
+      int seg = (filled < hw) ? filled : hw;
+      graphics_fill_rect(ctx, GRect(cx+gap+hw-seg, h-t, seg, t), 0, GCornerNone);
+      filled -= seg;
+    }
+    if (filled > 0) {
+      int seg = (filled < h) ? filled : h;
+      graphics_fill_rect(ctx, GRect(w-t, h-seg, t, seg), 0, GCornerNone);
+      filled -= seg;
+    }
+    if (filled > 0) {
+      int seg = (filled < hw) ? filled : hw;
+      graphics_fill_rect(ctx, GRect(cx+gap, 0, seg, t), 0, GCornerNone);
+    }
+  }
+
+  // Steps dim track
+  graphics_context_set_fill_color(ctx, eff_ring_dim());
+  graphics_fill_rect(ctx, GRect(0,         h-t, hw, t), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(0,         0,   t,  h), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(cx-gap-hw, 0,   hw, t), 0, GCornerNone);
+  // Steps fill
+  if (step_pct > 0) {
+    int filled = total * step_pct / 100;
+    graphics_context_set_fill_color(ctx, eff_ring_steps());
+    if (filled > 0) {
+      int seg = (filled < hw) ? filled : hw;
+      graphics_fill_rect(ctx, GRect(cx-gap-seg, h-t, seg, t), 0, GCornerNone);
+      filled -= seg;
+    }
+    if (filled > 0) {
+      int seg = (filled < h) ? filled : h;
+      graphics_fill_rect(ctx, GRect(0, h-seg, t, seg), 0, GCornerNone);
+      filled -= seg;
+    }
+    if (filled > 0) {
+      int seg = (filled < hw) ? filled : hw;
+      graphics_fill_rect(ctx, GRect(cx-gap-hw, 0, seg, t), 0, GCornerNone);
+    }
+  }
+}
+#endif
+
+// ============================================================
+// OUTER RING — ROUND
+// Battery: right semicircle (3°–177°). Steps: left (183°–357°).
+// ============================================================
+#if defined(PBL_ROUND)
+static void draw_ring_round(GContext *ctx, GRect bounds) {
+  int step_pct = (s_settings.StepGoal > 0)
+    ? (s_steps * 100 / s_settings.StepGoal) : 0;
+  if (step_pct > 100) step_pct = 100;
+
+  graphics_context_set_fill_color(ctx, eff_ring_dim());
+  graphics_fill_radial(ctx, bounds, GOvalScaleModeFitCircle, RING_THICK,
+                       DEG_TO_TRIGANGLE(3), DEG_TO_TRIGANGLE(177));
+  if (s_battery > 0) {
+    graphics_context_set_fill_color(ctx, eff_ring_batt());
+    graphics_fill_radial(ctx, bounds, GOvalScaleModeFitCircle, RING_THICK,
+                         DEG_TO_TRIGANGLE(177 - 174 * s_battery / 100),
+                         DEG_TO_TRIGANGLE(177));
+  }
+
+  graphics_context_set_fill_color(ctx, eff_ring_dim());
+  graphics_fill_radial(ctx, bounds, GOvalScaleModeFitCircle, RING_THICK,
+                       DEG_TO_TRIGANGLE(183), DEG_TO_TRIGANGLE(357));
+  if (step_pct > 0) {
+    graphics_context_set_fill_color(ctx, eff_ring_steps());
+    graphics_fill_radial(ctx, bounds, GOvalScaleModeFitCircle, RING_THICK,
+                         DEG_TO_TRIGANGLE(183),
+                         DEG_TO_TRIGANGLE(183 + 174 * step_pct / 100));
+  }
+}
+#endif
+
+// ============================================================
 // DRAW — RECT PLATFORMS
 // ============================================================
 #if !defined(PBL_ROUND)
@@ -157,41 +279,51 @@ static void draw_rect(GContext *ctx, GRect bounds) {
   int lbl_r_x    = rtick_x + TICK_LEN;
 
   // ---- Hour bar ----
-  int disp_hour = s_hour % 12;
-  if (disp_hour == 0) disp_hour = 12;
-  int hour_px = bar_h * disp_hour / 12;
+  bool is_24h = s_settings.Show24h;
+  int hour_px;
+  if (is_24h) {
+    hour_px = (s_hour == 0) ? 0 : (bar_h * s_hour / 23);
+  } else {
+    int disp = s_hour % 12;
+    if (disp == 0) disp = 12;
+    hour_px = bar_h * disp / 12;
+  }
 
-  // Empty track (dim color shows full bar ghost)
   graphics_context_set_fill_color(ctx, eff_dim());
   graphics_fill_rect(ctx, GRect(lbar_x, bar_top, BAR_WIDTH, bar_h), 0, GCornerNone);
-
-  // Filled portion (grows upward)
   if (hour_px > 0) {
     graphics_context_set_fill_color(ctx, eff_lit());
     graphics_fill_rect(ctx, GRect(lbar_x, bar_bottom - hour_px, BAR_WIDTH, hour_px), 0, GCornerNone);
   }
-
-  // Optional AM/PM notch: 1px bg-colored line at midpoint of bar
-  if (s_settings.Show24h) {
+  // 24h midpoint notch: background line separates AM from PM
+  if (is_24h) {
     int notch_y = bar_bottom - bar_h / 2;
     graphics_context_set_stroke_color(ctx, eff_bg());
     graphics_context_set_stroke_width(ctx, 1);
     graphics_draw_line(ctx, GPoint(lbar_x, notch_y), GPoint(lbar_x + BAR_WIDTH - 1, notch_y));
   }
 
-  // Ticks and labels — hours left side
+  // Hour ticks and labels (left side)
+  // 12h: labels 01–12.  24h: labels every 2h (even numbers only, to fit)
   graphics_context_set_stroke_color(ctx, eff_text());
   graphics_context_set_stroke_width(ctx, 1);
   graphics_context_set_text_color(ctx, eff_text());
-  for (int hr = 1; hr <= 12; hr++) {
-    int ty = bar_bottom - bar_h * hr / 12;
-    graphics_draw_line(ctx, GPoint(ltick_x, ty), GPoint(lbar_x - 1, ty));
-    static char lbl[4];
-    snprintf(lbl, sizeof(lbl), "%02d", hr);
-    graphics_draw_text(ctx, lbl,
-      fonts_get_system_font(FONT_KEY_GOTHIC_14),
-      GRect(lbl_l_x, ty - 8, LABEL_W, 16),
-      GTextOverflowModeFill, GTextAlignmentRight, NULL);
+  {
+    int total = is_24h ? 24 : 12;
+    for (int hr = 1; hr <= total; hr++) {
+      int ty = is_24h
+        ? (bar_bottom - bar_h * hr / 23)
+        : (bar_bottom - bar_h * hr / 12);
+      graphics_draw_line(ctx, GPoint(ltick_x, ty), GPoint(lbar_x - 1, ty));
+      if (!is_24h || (hr % 2 == 0)) {
+        static char lbl[4];
+        snprintf(lbl, sizeof(lbl), is_24h ? "%d" : "%02d", hr);
+        graphics_draw_text(ctx, lbl,
+          fonts_get_system_font(FONT_KEY_GOTHIC_14),
+          GRect(lbl_l_x, ty - 8, LABEL_W, 16),
+          GTextOverflowModeFill, GTextAlignmentRight, NULL);
+      }
+    }
   }
 
   // ---- Minute bar ----
@@ -199,13 +331,12 @@ static void draw_rect(GContext *ctx, GRect bounds) {
 
   graphics_context_set_fill_color(ctx, eff_dim());
   graphics_fill_rect(ctx, GRect(rbar_x, bar_top, BAR_WIDTH, bar_h), 0, GCornerNone);
-
   if (min_px > 0) {
     graphics_context_set_fill_color(ctx, eff_lit());
     graphics_fill_rect(ctx, GRect(rbar_x, bar_bottom - min_px, BAR_WIDTH, min_px), 0, GCornerNone);
   }
 
-  // Ticks and labels — minutes right side, every 5
+  // Minute ticks and labels (right side, every 5)
   graphics_context_set_stroke_color(ctx, eff_text());
   graphics_context_set_text_color(ctx, eff_text());
   for (int mn = 5; mn <= 60; mn += 5) {
@@ -220,94 +351,26 @@ static void draw_rect(GContext *ctx, GRect bounds) {
       GTextOverflowModeFill, GTextAlignmentLeft, NULL);
   }
 
-  // ---- Date text ----
+  // ---- Date ----
   graphics_context_set_text_color(ctx, eff_text());
   graphics_draw_text(ctx, s_date_buf,
     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
     GRect(0, date_y, w, DATE_HEIGHT + 4),
     GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 
-  // ---- Outer ring ----
-  if (show_ring) {
-    int step_pct = (s_settings.StepGoal > 0)
-      ? (s_steps * 100 / s_settings.StepGoal) : 0;
-    if (step_pct > 100) step_pct = 100;
-
-    int t   = RING_THICK;
-    int gap = 5;
-    int cx  = w / 2;
-    int hw  = cx - gap;
-    int total = hw + h + hw;
-
-    // Clear edge strips first
-    graphics_context_set_fill_color(ctx, eff_bg());
-    graphics_fill_rect(ctx, GRect(0,   0,   w, t), 0, GCornerNone);
-    graphics_fill_rect(ctx, GRect(0,   h-t, w, t), 0, GCornerNone);
-    graphics_fill_rect(ctx, GRect(0,   0,   t, h), 0, GCornerNone);
-    graphics_fill_rect(ctx, GRect(w-t, 0,   t, h), 0, GCornerNone);
-
-    // Battery empty track (right half, counterclockwise from bottom-center)
-    graphics_context_set_fill_color(ctx, eff_ring_dim());
-    graphics_fill_rect(ctx, GRect(cx+gap, h-t, hw, t), 0, GCornerNone);
-    graphics_fill_rect(ctx, GRect(w-t,    0,   t,  h), 0, GCornerNone);
-    graphics_fill_rect(ctx, GRect(cx+gap, 0,   hw, t), 0, GCornerNone);
-
-    // Battery fill
-    {
-      int filled = total * s_battery / 100;
-      graphics_context_set_fill_color(ctx, eff_ring_batt());
-      if (filled > 0) {
-        int seg = (filled < hw) ? filled : hw;
-        graphics_fill_rect(ctx, GRect(cx+gap+hw-seg, h-t, seg, t), 0, GCornerNone);
-        filled -= seg;
-      }
-      if (filled > 0) {
-        int seg = (filled < h) ? filled : h;
-        graphics_fill_rect(ctx, GRect(w-t, h-seg, t, seg), 0, GCornerNone);
-        filled -= seg;
-      }
-      if (filled > 0) {
-        int seg = (filled < hw) ? filled : hw;
-        graphics_fill_rect(ctx, GRect(cx+gap, 0, seg, t), 0, GCornerNone);
-      }
-    }
-
-    // Steps empty track (left half)
-    graphics_context_set_fill_color(ctx, eff_ring_dim());
-    graphics_fill_rect(ctx, GRect(0,         h-t, hw, t), 0, GCornerNone);
-    graphics_fill_rect(ctx, GRect(0,         0,   t,  h), 0, GCornerNone);
-    graphics_fill_rect(ctx, GRect(cx-gap-hw, 0,   hw, t), 0, GCornerNone);
-
-    // Steps fill
-    if (step_pct > 0) {
-      int filled = total * step_pct / 100;
-      graphics_context_set_fill_color(ctx, eff_ring_steps());
-      if (filled > 0) {
-        int seg = (filled < hw) ? filled : hw;
-        graphics_fill_rect(ctx, GRect(cx-gap-seg, h-t, seg, t), 0, GCornerNone);
-        filled -= seg;
-      }
-      if (filled > 0) {
-        int seg = (filled < h) ? filled : h;
-        graphics_fill_rect(ctx, GRect(0, h-seg, t, seg), 0, GCornerNone);
-        filled -= seg;
-      }
-      if (filled > 0) {
-        int seg = (filled < hw) ? filled : hw;
-        graphics_fill_rect(ctx, GRect(cx-gap-hw, 0, seg, t), 0, GCornerNone);
-      }
-    }
-  }
+  // ---- Ring ----
+  if (show_ring) draw_ring_rect(ctx, w, h);
 }
-#endif // !PBL_ROUND
+#endif
 
 // ============================================================
-// DRAW — ROUND PLATFORMS
+// DRAW — ROUND PLATFORMS (Chalk, Emery)
 // ============================================================
-// Hours: bottom semicircle (180°–360°), 12 spokes at 15° pitch (9° wide, 6° gap).
-// Minutes: top semicircle (0°–180°), 60 spokes at 3° pitch (2° wide, 1° gap).
-// All spokes emanate from a central hub, stopping short of a label ring at the edge.
-// Date text lives in the center hub area.
+// Same two vertical bars. The circle boundary is used to determine
+// how far each horizontal tick line can extend — ticks reach from
+// the bar edge to ROUND_TICK_MARGIN px short of the circle edge at
+// that y position, with a label just inside the boundary.
+// Date fits in the gap between the two bars near the center.
 #if defined(PBL_ROUND)
 static void draw_round(GContext *ctx, GRect bounds) {
   int w  = bounds.size.w;
@@ -316,123 +379,130 @@ static void draw_round(GContext *ctx, GRect bounds) {
   int cy = h / 2;
   int r  = (w < h ? w : h) / 2;
 
-  bool show_ring  = s_settings.ShowRing;
-  int  ring_inset = show_ring ? (RING_THICK + RING_GAP) : 0;
-  int  spoke_outer = r - ring_inset - SPOKE_OUTER_INSET;
-  int  spoke_inner = SPOKE_INNER_R;
-  int  label_r     = r - ring_inset - SPOKE_LABEL_INSET;
-  int  spoke_thick = spoke_outer - spoke_inner;
+  bool show_ring = s_settings.ShowRing;
+  // Usable radius inside the ring (or full radius if no ring)
+  int cr = r - (show_ring ? (RING_THICK + RING_GAP) : 0);
 
-  GRect spoke_rect = GRect(cx - spoke_outer, cy - spoke_outer,
-                           spoke_outer * 2,  spoke_outer * 2);
+  // Bar vertical extents: span almost the full usable circle height
+  int bar_margin_v = 10;
+  int bar_top    = cy - cr + bar_margin_v;
+  int bar_bottom = cy + cr - bar_margin_v;
+  int bar_h      = bar_bottom - bar_top;
+  if (bar_h < 10) bar_h = 10;
 
-  // ---- Minutes — top semicircle 0°–180° ----
-  // 60 spokes, 2° wide, 1° gap, 3° pitch. Spoke i at [1+3i, 1+3i+2).
-  // Draw empty track first, then overlay filled.
-  for (int i = 0; i < 60; i++) {
-    int a_start = 1 + 3 * i;
-    graphics_context_set_fill_color(ctx, (i < s_minute) ? eff_lit() : eff_dim());
-    graphics_fill_radial(ctx, spoke_rect, GOvalScaleModeFitCircle, spoke_thick,
-                         DEG_TO_TRIGANGLE(a_start), DEG_TO_TRIGANGLE(a_start + 2));
+  // Bar horizontal positions: centered
+  int lbar_x = cx - ROUND_BAR_GAP / 2 - ROUND_BAR_W;
+  int rbar_x = cx + ROUND_BAR_GAP / 2;
+
+  // ---- Hour bar ----
+  bool is_24h = s_settings.Show24h;
+  int hour_px;
+  if (is_24h) {
+    hour_px = (s_hour == 0) ? 0 : (bar_h * s_hour / 23);
+  } else {
+    int disp = s_hour % 12;
+    if (disp == 0) disp = 12;
+    hour_px = bar_h * disp / 12;
   }
 
-  // ---- Hours — bottom semicircle 180°–360° ----
-  // 12 spokes, 9° wide, 6° gap, 15° pitch. Spoke i at [183+15i, 183+15i+9).
-  int disp_hour = s_hour % 12;
-  if (disp_hour == 0) disp_hour = 12;
-
-  for (int i = 0; i < 12; i++) {
-    int a_start = 183 + 15 * i;
-    graphics_context_set_fill_color(ctx, (i < disp_hour) ? eff_lit() : eff_dim());
-    graphics_fill_radial(ctx, spoke_rect, GOvalScaleModeFitCircle, spoke_thick,
-                         DEG_TO_TRIGANGLE(a_start), DEG_TO_TRIGANGLE(a_start + 9));
+  graphics_context_set_fill_color(ctx, eff_dim());
+  graphics_fill_rect(ctx, GRect(lbar_x, bar_top, ROUND_BAR_W, bar_h), 0, GCornerNone);
+  if (hour_px > 0) {
+    graphics_context_set_fill_color(ctx, eff_lit());
+    graphics_fill_rect(ctx, GRect(lbar_x, bar_bottom - hour_px, ROUND_BAR_W, hour_px), 0, GCornerNone);
+  }
+  if (is_24h) {
+    int notch_y = bar_bottom - bar_h / 2;
+    graphics_context_set_stroke_color(ctx, eff_bg());
+    graphics_context_set_stroke_width(ctx, 1);
+    graphics_draw_line(ctx, GPoint(lbar_x, notch_y), GPoint(lbar_x + ROUND_BAR_W - 1, notch_y));
   }
 
-  // ---- Hub — cleans up spoke roots ----
-  graphics_context_set_fill_color(ctx, eff_bg());
-  graphics_fill_circle(ctx, GPoint(cx, cy), spoke_inner);
+  // ---- Minute bar ----
+  int min_px = (s_minute == 0) ? 0 : (bar_h * s_minute / 59);
 
-  // ---- Minute labels: 5, 10... 60 around top edge ----
+  graphics_context_set_fill_color(ctx, eff_dim());
+  graphics_fill_rect(ctx, GRect(rbar_x, bar_top, ROUND_BAR_W, bar_h), 0, GCornerNone);
+  if (min_px > 0) {
+    graphics_context_set_fill_color(ctx, eff_lit());
+    graphics_fill_rect(ctx, GRect(rbar_x, bar_bottom - min_px, ROUND_BAR_W, min_px), 0, GCornerNone);
+  }
+
+  // ---- Ticks and labels ----
+  // For each tick at y, compute half-width of the usable circle at that row:
+  //   hw = sqrt(cr^2 - (y - cy)^2)
+  // Left tick:  from lbar_x-1 extending left  to cx - hw + ROUND_TICK_MARGIN
+  // Right tick: from rbar_x+ROUND_BAR_W right to cx + hw - ROUND_TICK_MARGIN
+  // Label sits at cx ± (hw - ROUND_LABEL_MARGIN)
+  graphics_context_set_stroke_width(ctx, 1);
   graphics_context_set_text_color(ctx, eff_text());
+
+  // Hour ticks (left side)
+  {
+    int total = is_24h ? 24 : 12;
+    for (int hr = 1; hr <= total; hr++) {
+      int ty = is_24h
+        ? (bar_bottom - bar_h * hr / 23)
+        : (bar_bottom - bar_h * hr / 12);
+      int dy = ty - cy;
+      int hw = prv_isqrt(cr * cr - dy * dy);
+      int tick_end = cx - hw + ROUND_TICK_MARGIN;
+      if (tick_end < lbar_x - 1) {
+        graphics_context_set_stroke_color(ctx, eff_text());
+        graphics_draw_line(ctx, GPoint(tick_end, ty), GPoint(lbar_x - 1, ty));
+      }
+      if (!is_24h || (hr % 2 == 0)) {
+        int lbl_cx = cx - hw + ROUND_LABEL_MARGIN;
+        static char lbl[4];
+        snprintf(lbl, sizeof(lbl), is_24h ? "%d" : "%02d", hr);
+        graphics_draw_text(ctx, lbl,
+          fonts_get_system_font(FONT_KEY_GOTHIC_14),
+          GRect(lbl_cx - 13, ty - 8, 26, 16),
+          GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+      }
+    }
+  }
+
+  // Minute ticks (right side, every 5)
   for (int mn = 5; mn <= 60; mn += 5) {
-    // Midpoint angle of the spoke for this minute
-    // Spoke mn-1 (0-indexed) is at 1 + 3*(mn-1) + 1 = 3*mn - 1 degrees
-    int a_deg = 3 * mn - 1;
-    if (mn == 60) a_deg = 178;  // clamp last label
-    int32_t a = DEG_TO_TRIGANGLE(a_deg);
-    int lx = cx + label_r * sin_lookup(a) / TRIG_MAX_RATIO;
-    int ly = cy - label_r * cos_lookup(a) / TRIG_MAX_RATIO;
+    int mn_src = (mn == 60) ? 59 : mn;
+    int ty = bar_bottom - bar_h * mn_src / 59;
+    int dy = ty - cy;
+    int hw = prv_isqrt(cr * cr - dy * dy);
+    int tick_end = cx + hw - ROUND_TICK_MARGIN;
+    if (tick_end > rbar_x + ROUND_BAR_W) {
+      graphics_context_set_stroke_color(ctx, eff_text());
+      graphics_draw_line(ctx, GPoint(rbar_x + ROUND_BAR_W, ty), GPoint(tick_end, ty));
+    }
+    int lbl_cx = cx + hw - ROUND_LABEL_MARGIN;
     static char lbl[4];
     snprintf(lbl, sizeof(lbl), "%d", mn);
     graphics_draw_text(ctx, lbl,
       fonts_get_system_font(FONT_KEY_GOTHIC_14),
-      GRect(lx - 13, ly - 8, 26, 16),
+      GRect(lbl_cx - 13, ty - 8, 26, 16),
       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
   }
 
-  // ---- Hour labels: 1–12 around bottom edge ----
-  for (int hr = 1; hr <= 12; hr++) {
-    // Midpoint of spoke hr-1 (0-indexed): 183 + 15*(hr-1) + 4
-    int a_deg = 183 + 15 * (hr - 1) + 4;
-    int32_t a = DEG_TO_TRIGANGLE(a_deg);
-    int lx = cx + label_r * sin_lookup(a) / TRIG_MAX_RATIO;
-    int ly = cy - label_r * cos_lookup(a) / TRIG_MAX_RATIO;
-    static char lbl[4];
-    snprintf(lbl, sizeof(lbl), "%d", hr);
-    graphics_draw_text(ctx, lbl,
-      fonts_get_system_font(FONT_KEY_GOTHIC_14),
-      GRect(lx - 13, ly - 8, 26, 16),
-      GTextOverflowModeFill, GTextAlignmentCenter, NULL);
-  }
-
-  // ---- Date: centered in hub ----
+  // ---- Date: in the gap between bars, near vertical center ----
   graphics_context_set_text_color(ctx, eff_text());
   graphics_draw_text(ctx, s_date_buf,
-    fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-    GRect(cx - 52, cy - 10, 104, 22),
+    fonts_get_system_font(FONT_KEY_GOTHIC_14),
+    GRect(lbar_x + ROUND_BAR_W, cy - 8, ROUND_BAR_GAP, 16),
     GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 
-  // ---- Outer ring: battery right, steps left ----
-  if (show_ring) {
-    int step_pct = (s_settings.StepGoal > 0)
-      ? (s_steps * 100 / s_settings.StepGoal) : 0;
-    if (step_pct > 100) step_pct = 100;
-
-    // Battery: right semicircle (3°–177°), fills from bottom-right up
-    graphics_context_set_fill_color(ctx, eff_ring_dim());
-    graphics_fill_radial(ctx, bounds, GOvalScaleModeFitCircle, RING_THICK,
-                         DEG_TO_TRIGANGLE(3), DEG_TO_TRIGANGLE(177));
-    if (s_battery > 0) {
-      graphics_context_set_fill_color(ctx, eff_ring_batt());
-      graphics_fill_radial(ctx, bounds, GOvalScaleModeFitCircle, RING_THICK,
-                           DEG_TO_TRIGANGLE(177 - 174 * s_battery / 100),
-                           DEG_TO_TRIGANGLE(177));
-    }
-
-    // Steps: left semicircle (183°–357°), fills from bottom-left up
-    graphics_context_set_fill_color(ctx, eff_ring_dim());
-    graphics_fill_radial(ctx, bounds, GOvalScaleModeFitCircle, RING_THICK,
-                         DEG_TO_TRIGANGLE(183), DEG_TO_TRIGANGLE(357));
-    if (step_pct > 0) {
-      graphics_context_set_fill_color(ctx, eff_ring_steps());
-      graphics_fill_radial(ctx, bounds, GOvalScaleModeFitCircle, RING_THICK,
-                           DEG_TO_TRIGANGLE(183),
-                           DEG_TO_TRIGANGLE(183 + 174 * step_pct / 100));
-    }
-  }
+  // ---- Ring ----
+  if (show_ring) draw_ring_round(ctx, bounds);
 }
-#endif // PBL_ROUND
+#endif
 
 // ============================================================
 // MAIN DRAW CALLBACK
 // ============================================================
 static void draw_layer(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_unobstructed_bounds(layer);
-
   graphics_context_set_fill_color(ctx, eff_bg());
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
   graphics_context_set_stroke_width(ctx, 1);
-
 #if defined(PBL_ROUND)
   draw_round(ctx, bounds);
 #else
@@ -446,7 +516,7 @@ static void draw_layer(Layer *layer, GContext *ctx) {
 static void tick_handler(struct tm *t, TimeUnits units_changed) {
   s_hour   = t->tm_hour;
   s_minute = t->tm_min;
-  strftime(s_date_buf, sizeof(s_date_buf), "%a, %b %e", t);
+  strftime(s_date_buf, sizeof(s_date_buf), "%a %b %e", t);
   layer_mark_dirty(s_canvas_layer);
 }
 
@@ -512,7 +582,6 @@ static void window_unload(Window *window) {
 
 static void init(void) {
   prv_load_settings();
-
   s_window = window_create();
   window_set_window_handlers(s_window, (WindowHandlers){
     .load   = window_load,
