@@ -12,23 +12,20 @@
 
 // Rect layout
 #define DATE_HEIGHT         22
-#define BAR_MARGIN_TOP      6
+#define BAR_MARGIN_TOP      4
 #define BAR_MARGIN_BOTTOM   4
-#define BAR_WIDTH           20
+#define BAR_WIDTH           28    // wider bars
 #define BAR_GAP             12
 #define TICK_LEN            5
 #define LABEL_W             26
 
-// Round layout — same two-bar concept, clipped to circle.
-// Bars are vertical and centered. Ticks extend horizontally
-// toward the circle boundary, stopping ROUND_TICK_MARGIN px short.
-// Labels sit just inside the circle edge. Date goes below the bars.
-#define ROUND_BAR_W         18    // px width of each bar
-#define ROUND_BAR_GAP       10    // px gap between bars
-#define ROUND_TICK_MARGIN   28    // px from circle edge where tick line ends
-#define ROUND_LABEL_MARGIN  14    // px from circle edge to center of label
-#define ROUND_DATE_H        18    // px height reserved below bars for date
-#define ROUND_DATE_GAP      4     // px gap between bar bottom and date text
+// Round layout
+#define ROUND_BAR_W         24
+#define ROUND_BAR_GAP       10
+#define ROUND_TICK_MARGIN   28
+#define ROUND_LABEL_MARGIN  14
+#define ROUND_DATE_H        18
+#define ROUND_DATE_GAP      4
 
 // ============================================================
 // SETTINGS
@@ -85,7 +82,7 @@ static int  s_steps   = 0;
 static char s_date_buf[20];
 
 // ============================================================
-// INTEGER SQRT (Pebble SDK has no math.h sqrt in C)
+// INTEGER SQRT
 // ============================================================
 static int prv_isqrt(int n) {
   if (n <= 0) return 0;
@@ -249,6 +246,35 @@ static void draw_ring_round(GContext *ctx, GRect bounds) {
 #endif
 
 // ============================================================
+// DRAW BAR WITH SEPARATOR TICKS
+// Draws a dim track, then lit fill, then redraws tick lines
+// across the full bar width in bg color — so ticks appear as
+// background-colored separators through both dim and lit regions.
+// ============================================================
+static void draw_bar_with_ticks(GContext *ctx,
+                                int bar_x, int bar_y, int bar_w, int bar_h,
+                                int lit_px,
+                                int *tick_ys, int tick_count) {
+  // Dim track
+  graphics_context_set_fill_color(ctx, eff_dim());
+  graphics_fill_rect(ctx, GRect(bar_x, bar_y, bar_w, bar_h), 0, GCornerNone);
+
+  // Lit fill (grows upward from bottom)
+  if (lit_px > 0) {
+    graphics_context_set_fill_color(ctx, eff_lit());
+    graphics_fill_rect(ctx, GRect(bar_x, bar_y + bar_h - lit_px, bar_w, lit_px), 0, GCornerNone);
+  }
+
+  // Separator ticks: bg-colored lines across the full bar width
+  graphics_context_set_stroke_color(ctx, eff_bg());
+  graphics_context_set_stroke_width(ctx, 1);
+  for (int i = 0; i < tick_count; i++) {
+    int ty = tick_ys[i];
+    graphics_draw_line(ctx, GPoint(bar_x, ty), GPoint(bar_x + bar_w - 1, ty));
+  }
+}
+
+// ============================================================
 // DRAW — RECT PLATFORMS
 // ============================================================
 #if !defined(PBL_ROUND)
@@ -257,9 +283,11 @@ static void draw_rect(GContext *ctx, GRect bounds) {
   int h = bounds.size.h;
 
   bool show_ring = s_settings.ShowRing;
+  // Ring inset applies to ALL four sides
   int ring_inset = show_ring ? (RING_THICK + RING_GAP) : 0;
 
-  int date_y     = h - DATE_HEIGHT;
+  // Date strip at bottom, above the ring
+  int date_y     = h - ring_inset - DATE_HEIGHT;
   int bar_top    = ring_inset + BAR_MARGIN_TOP;
   int bar_bottom = date_y - BAR_MARGIN_BOTTOM;
   int bar_h      = bar_bottom - bar_top;
@@ -275,6 +303,8 @@ static void draw_rect(GContext *ctx, GRect bounds) {
   int lbl_r_x    = rtick_x + TICK_LEN;
 
   bool is_24h = s_settings.Show24h;
+
+  // ---- Hour bar ----
   int hour_px;
   if (is_24h) {
     hour_px = (s_hour == 0) ? 0 : (bar_h * s_hour / 23);
@@ -284,54 +314,61 @@ static void draw_rect(GContext *ctx, GRect bounds) {
     hour_px = bar_h * disp / 12;
   }
 
-  graphics_context_set_fill_color(ctx, eff_dim());
-  graphics_fill_rect(ctx, GRect(lbar_x, bar_top, BAR_WIDTH, bar_h), 0, GCornerNone);
-  if (hour_px > 0) {
-    graphics_context_set_fill_color(ctx, eff_lit());
-    graphics_fill_rect(ctx, GRect(lbar_x, bar_bottom - hour_px, BAR_WIDTH, hour_px), 0, GCornerNone);
+  // Build hour tick y positions
+  int total_h = is_24h ? 24 : 12;
+  int hour_ticks[24];
+  for (int hr = 1; hr <= total_h; hr++) {
+    hour_ticks[hr-1] = is_24h
+      ? (bar_bottom - bar_h * hr / 23)
+      : (bar_bottom - bar_h * hr / 12);
   }
+
+  draw_bar_with_ticks(ctx, lbar_x, bar_top, BAR_WIDTH, bar_h, hour_px, hour_ticks, total_h);
+
+  // 24h midpoint notch (AM/PM separator on top of everything)
   if (is_24h) {
     int notch_y = bar_bottom - bar_h / 2;
     graphics_context_set_stroke_color(ctx, eff_bg());
-    graphics_context_set_stroke_width(ctx, 1);
+    graphics_context_set_stroke_width(ctx, 2);
     graphics_draw_line(ctx, GPoint(lbar_x, notch_y), GPoint(lbar_x + BAR_WIDTH - 1, notch_y));
   }
 
+  // Hour tick lines and labels (left side, outside bar)
   graphics_context_set_stroke_color(ctx, eff_text());
   graphics_context_set_stroke_width(ctx, 1);
   graphics_context_set_text_color(ctx, eff_text());
-  {
-    int total = is_24h ? 24 : 12;
-    for (int hr = 1; hr <= total; hr++) {
-      int ty = is_24h
-        ? (bar_bottom - bar_h * hr / 23)
-        : (bar_bottom - bar_h * hr / 12);
-      graphics_draw_line(ctx, GPoint(ltick_x, ty), GPoint(lbar_x - 1, ty));
-      if (!is_24h || (hr % 2 == 0)) {
-        static char lbl[4];
-        snprintf(lbl, sizeof(lbl), is_24h ? "%d" : "%02d", hr);
-        graphics_draw_text(ctx, lbl,
-          fonts_get_system_font(FONT_KEY_GOTHIC_14),
-          GRect(lbl_l_x, ty - 8, LABEL_W, 16),
-          GTextOverflowModeFill, GTextAlignmentRight, NULL);
-      }
+  for (int hr = 1; hr <= total_h; hr++) {
+    int ty = hour_ticks[hr-1];
+    graphics_draw_line(ctx, GPoint(ltick_x, ty), GPoint(lbar_x - 1, ty));
+    if (!is_24h || (hr % 2 == 0)) {
+      static char lbl[4];
+      snprintf(lbl, sizeof(lbl), is_24h ? "%d" : "%02d", hr);
+      graphics_draw_text(ctx, lbl,
+        fonts_get_system_font(FONT_KEY_GOTHIC_14),
+        GRect(lbl_l_x, ty - 8, LABEL_W, 16),
+        GTextOverflowModeFill, GTextAlignmentRight, NULL);
     }
   }
 
+  // ---- Minute bar ----
   int min_px = (s_minute == 0) ? 0 : (bar_h * s_minute / 59);
-  graphics_context_set_fill_color(ctx, eff_dim());
-  graphics_fill_rect(ctx, GRect(rbar_x, bar_top, BAR_WIDTH, bar_h), 0, GCornerNone);
-  if (min_px > 0) {
-    graphics_context_set_fill_color(ctx, eff_lit());
-    graphics_fill_rect(ctx, GRect(rbar_x, bar_bottom - min_px, BAR_WIDTH, min_px), 0, GCornerNone);
+
+  int min_ticks[12];
+  for (int i = 0; i < 12; i++) {
+    int mn = (i + 1) * 5;
+    int mn_src = (mn == 60) ? 59 : mn;
+    min_ticks[i] = bar_bottom - bar_h * mn_src / 59;
   }
 
+  draw_bar_with_ticks(ctx, rbar_x, bar_top, BAR_WIDTH, bar_h, min_px, min_ticks, 12);
+
+  // Minute tick lines and labels (right side, outside bar)
   graphics_context_set_stroke_color(ctx, eff_text());
   graphics_context_set_text_color(ctx, eff_text());
-  for (int mn = 5; mn <= 60; mn += 5) {
-    int mn_src = (mn == 60) ? 59 : mn;
-    int ty = bar_bottom - bar_h * mn_src / 59;
-    graphics_draw_line(ctx, GPoint(rbar_x + BAR_WIDTH, ty), GPoint(rtick_x + TICK_LEN - 1, ty));
+  for (int i = 0; i < 12; i++) {
+    int mn = (i + 1) * 5;
+    int ty = min_ticks[i];
+    graphics_draw_line(ctx, GPoint(rtick_x, ty), GPoint(rtick_x + TICK_LEN - 1, ty));
     static char lbl[4];
     snprintf(lbl, sizeof(lbl), "%d", mn);
     graphics_draw_text(ctx, lbl,
@@ -340,6 +377,7 @@ static void draw_rect(GContext *ctx, GRect bounds) {
       GTextOverflowModeFill, GTextAlignmentLeft, NULL);
   }
 
+  // ---- Date ----
   graphics_context_set_text_color(ctx, eff_text());
   graphics_draw_text(ctx, s_date_buf,
     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
@@ -351,12 +389,8 @@ static void draw_rect(GContext *ctx, GRect bounds) {
 #endif
 
 // ============================================================
-// DRAW — ROUND PLATFORMS (Chalk, Emery)
+// DRAW — ROUND PLATFORMS
 // ============================================================
-// Two vertical bars, centered on the face. Ticks extend horizontally
-// to ROUND_TICK_MARGIN px short of the circle boundary at each y.
-// Labels sit just inside the boundary. Date text sits below the bars,
-// horizontally centered across the full face width.
 #if defined(PBL_ROUND)
 static void draw_round(GContext *ctx, GRect bounds) {
   int w  = bounds.size.w;
@@ -368,9 +402,7 @@ static void draw_round(GContext *ctx, GRect bounds) {
   bool show_ring = s_settings.ShowRing;
   int cr = r - (show_ring ? (RING_THICK + RING_GAP) : 0);
 
-  // Reserve space at the bottom for date text.
-  // bar_bottom stops ROUND_DATE_GAP + ROUND_DATE_H above the bottom of the usable area.
-  int usable_bottom = cy + cr - 6;   // 6px margin from usable circle edge
+  int usable_bottom = cy + cr - 6;
   int usable_top    = cy - cr + 6;
   int date_y        = usable_bottom - ROUND_DATE_H;
   int bar_top       = usable_top;
@@ -381,8 +413,9 @@ static void draw_round(GContext *ctx, GRect bounds) {
   int lbar_x = cx - ROUND_BAR_GAP / 2 - ROUND_BAR_W;
   int rbar_x = cx + ROUND_BAR_GAP / 2;
 
-  // ---- Hour bar ----
   bool is_24h = s_settings.Show24h;
+
+  // ---- Hour bar ----
   int hour_px;
   if (is_24h) {
     hour_px = (s_hour == 0) ? 0 : (bar_h * s_hour / 23);
@@ -392,65 +425,63 @@ static void draw_round(GContext *ctx, GRect bounds) {
     hour_px = bar_h * disp / 12;
   }
 
-  graphics_context_set_fill_color(ctx, eff_dim());
-  graphics_fill_rect(ctx, GRect(lbar_x, bar_top, ROUND_BAR_W, bar_h), 0, GCornerNone);
-  if (hour_px > 0) {
-    graphics_context_set_fill_color(ctx, eff_lit());
-    graphics_fill_rect(ctx, GRect(lbar_x, bar_bottom - hour_px, ROUND_BAR_W, hour_px), 0, GCornerNone);
+  int total_h = is_24h ? 24 : 12;
+  int hour_ticks[24];
+  for (int hr = 1; hr <= total_h; hr++) {
+    hour_ticks[hr-1] = is_24h
+      ? (bar_bottom - bar_h * hr / 23)
+      : (bar_bottom - bar_h * hr / 12);
   }
+
+  draw_bar_with_ticks(ctx, lbar_x, bar_top, ROUND_BAR_W, bar_h, hour_px, hour_ticks, total_h);
+
   if (is_24h) {
     int notch_y = bar_bottom - bar_h / 2;
     graphics_context_set_stroke_color(ctx, eff_bg());
-    graphics_context_set_stroke_width(ctx, 1);
+    graphics_context_set_stroke_width(ctx, 2);
     graphics_draw_line(ctx, GPoint(lbar_x, notch_y), GPoint(lbar_x + ROUND_BAR_W - 1, notch_y));
   }
 
   // ---- Minute bar ----
   int min_px = (s_minute == 0) ? 0 : (bar_h * s_minute / 59);
 
-  graphics_context_set_fill_color(ctx, eff_dim());
-  graphics_fill_rect(ctx, GRect(rbar_x, bar_top, ROUND_BAR_W, bar_h), 0, GCornerNone);
-  if (min_px > 0) {
-    graphics_context_set_fill_color(ctx, eff_lit());
-    graphics_fill_rect(ctx, GRect(rbar_x, bar_bottom - min_px, ROUND_BAR_W, min_px), 0, GCornerNone);
+  int min_ticks[12];
+  for (int i = 0; i < 12; i++) {
+    int mn = (i + 1) * 5;
+    int mn_src = (mn == 60) ? 59 : mn;
+    min_ticks[i] = bar_bottom - bar_h * mn_src / 59;
   }
 
-  // ---- Ticks and labels ----
+  draw_bar_with_ticks(ctx, rbar_x, bar_top, ROUND_BAR_W, bar_h, min_px, min_ticks, 12);
+
+  // ---- Ticks and labels (outside bars, toward circle edge) ----
   graphics_context_set_stroke_width(ctx, 1);
   graphics_context_set_text_color(ctx, eff_text());
 
-  // Hour ticks (left side)
-  {
-    int total = is_24h ? 24 : 12;
-    for (int hr = 1; hr <= total; hr++) {
-      int ty = is_24h
-        ? (bar_bottom - bar_h * hr / 23)
-        : (bar_bottom - bar_h * hr / 12);
-      int dy = ty - cy;
-      int cr2 = cr * cr - dy * dy;
-      if (cr2 < 0) continue;
-      int hw = prv_isqrt(cr2);
-      int tick_end = cx - hw + ROUND_TICK_MARGIN;
-      if (tick_end < lbar_x - 1) {
-        graphics_context_set_stroke_color(ctx, eff_text());
-        graphics_draw_line(ctx, GPoint(tick_end, ty), GPoint(lbar_x - 1, ty));
-      }
-      if (!is_24h || (hr % 2 == 0)) {
-        int lbl_cx = cx - hw + ROUND_LABEL_MARGIN;
-        static char lbl[4];
-        snprintf(lbl, sizeof(lbl), is_24h ? "%d" : "%02d", hr);
-        graphics_draw_text(ctx, lbl,
-          fonts_get_system_font(FONT_KEY_GOTHIC_14),
-          GRect(lbl_cx - 13, ty - 8, 26, 16),
-          GTextOverflowModeFill, GTextAlignmentCenter, NULL);
-      }
+  for (int hr = 1; hr <= total_h; hr++) {
+    int ty = hour_ticks[hr-1];
+    int dy = ty - cy;
+    int cr2 = cr * cr - dy * dy;
+    if (cr2 < 0) continue;
+    int hw = prv_isqrt(cr2);
+    int tick_end = cx - hw + ROUND_TICK_MARGIN;
+    if (tick_end < lbar_x - 1) {
+      graphics_context_set_stroke_color(ctx, eff_text());
+      graphics_draw_line(ctx, GPoint(tick_end, ty), GPoint(lbar_x - 1, ty));
+    }
+    if (!is_24h || (hr % 2 == 0)) {
+      int lbl_cx = cx - hw + ROUND_LABEL_MARGIN;
+      static char lbl[4];
+      snprintf(lbl, sizeof(lbl), is_24h ? "%d" : "%02d", hr);
+      graphics_draw_text(ctx, lbl,
+        fonts_get_system_font(FONT_KEY_GOTHIC_14),
+        GRect(lbl_cx - 13, ty - 8, 26, 16),
+        GTextOverflowModeFill, GTextAlignmentCenter, NULL);
     }
   }
 
-  // Minute ticks (right side, every 5)
-  for (int mn = 5; mn <= 60; mn += 5) {
-    int mn_src = (mn == 60) ? 59 : mn;
-    int ty = bar_bottom - bar_h * mn_src / 59;
+  for (int i = 0; i < 12; i++) {
+    int ty = min_ticks[i];
     int dy = ty - cy;
     int cr2 = cr * cr - dy * dy;
     if (cr2 < 0) continue;
@@ -460,6 +491,7 @@ static void draw_round(GContext *ctx, GRect bounds) {
       graphics_context_set_stroke_color(ctx, eff_text());
       graphics_draw_line(ctx, GPoint(rbar_x + ROUND_BAR_W, ty), GPoint(tick_end, ty));
     }
+    int mn = (i + 1) * 5;
     int lbl_cx = cx + hw - ROUND_LABEL_MARGIN;
     static char lbl[4];
     snprintf(lbl, sizeof(lbl), "%d", mn);
@@ -469,14 +501,13 @@ static void draw_round(GContext *ctx, GRect bounds) {
       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
   }
 
-  // ---- Date: centered below the bars ----
+  // ---- Date ----
   graphics_context_set_text_color(ctx, eff_text());
   graphics_draw_text(ctx, s_date_buf,
     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
     GRect(0, date_y, w, ROUND_DATE_H + 4),
     GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 
-  // ---- Ring ----
   if (show_ring) draw_ring_round(ctx, bounds);
 }
 #endif
