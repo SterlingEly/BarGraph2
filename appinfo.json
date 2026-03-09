@@ -3,8 +3,8 @@
   "shortName": "Bar Graph",
   "longName": "Bar Graph 2",
   "companyName": "Sterling Ely",
-  "versionLabel": "3.0",
-  "versionCode": 2,
+  "versionLabel": "2.0",
+  "versionCode": 1,
   "watchapp": {
     "watchface": true
   },
