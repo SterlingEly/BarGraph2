@@ -28,7 +28,15 @@
         "menuIcon": true,
         "type": "png",
         "name": "IMAGE_MENU_ICON",
-        "file": "images/menu_icon.png"
+        "file": "images/menu_icon~bw.png",
+        "targetPlatforms": ["aplite", "diorite", "flint"]
+      },
+      {
+        "menuIcon": true,
+        "type": "png",
+        "name": "IMAGE_MENU_ICON",
+        "file": "images/menu_icon~color.png",
+        "targetPlatforms": ["basalt", "chalk", "emery"]
       }
     ]
   }
