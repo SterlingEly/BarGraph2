@@ -22,11 +22,13 @@
 // Round layout — same two-bar concept, clipped to circle.
 // Bars are vertical and centered. Ticks extend horizontally
 // toward the circle boundary, stopping ROUND_TICK_MARGIN px short.
-// Labels sit just inside the circle edge.
+// Labels sit just inside the circle edge. Date goes below the bars.
 #define ROUND_BAR_W         18    // px width of each bar
 #define ROUND_BAR_GAP       10    // px gap between bars
 #define ROUND_TICK_MARGIN   28    // px from circle edge where tick line ends
 #define ROUND_LABEL_MARGIN  14    // px from circle edge to center of label
+#define ROUND_DATE_H        18    // px height reserved below bars for date
+#define ROUND_DATE_GAP      4     // px gap between bar bottom and date text
 
 // ============================================================
 // SETTINGS
@@ -148,7 +150,6 @@ static GColor eff_ring_dim(void) {
 
 // ============================================================
 // OUTER RING — RECT
-// Battery: right half. Steps: left half. Both track from bottom-center outward.
 // ============================================================
 #if !defined(PBL_ROUND)
 static void draw_ring_rect(GContext *ctx, int w, int h) {
@@ -168,12 +169,10 @@ static void draw_ring_rect(GContext *ctx, int w, int h) {
   graphics_fill_rect(ctx, GRect(0,   0,   t, h), 0, GCornerNone);
   graphics_fill_rect(ctx, GRect(w-t, 0,   t, h), 0, GCornerNone);
 
-  // Battery dim track
   graphics_context_set_fill_color(ctx, eff_ring_dim());
   graphics_fill_rect(ctx, GRect(cx+gap, h-t, hw, t), 0, GCornerNone);
   graphics_fill_rect(ctx, GRect(w-t,    0,   t,  h), 0, GCornerNone);
   graphics_fill_rect(ctx, GRect(cx+gap, 0,   hw, t), 0, GCornerNone);
-  // Battery fill
   {
     int filled = total * s_battery / 100;
     graphics_context_set_fill_color(ctx, eff_ring_batt());
@@ -193,12 +192,10 @@ static void draw_ring_rect(GContext *ctx, int w, int h) {
     }
   }
 
-  // Steps dim track
   graphics_context_set_fill_color(ctx, eff_ring_dim());
   graphics_fill_rect(ctx, GRect(0,         h-t, hw, t), 0, GCornerNone);
   graphics_fill_rect(ctx, GRect(0,         0,   t,  h), 0, GCornerNone);
   graphics_fill_rect(ctx, GRect(cx-gap-hw, 0,   hw, t), 0, GCornerNone);
-  // Steps fill
   if (step_pct > 0) {
     int filled = total * step_pct / 100;
     graphics_context_set_fill_color(ctx, eff_ring_steps());
@@ -222,7 +219,6 @@ static void draw_ring_rect(GContext *ctx, int w, int h) {
 
 // ============================================================
 // OUTER RING — ROUND
-// Battery: right semicircle (3°–177°). Steps: left (183°–357°).
 // ============================================================
 #if defined(PBL_ROUND)
 static void draw_ring_round(GContext *ctx, GRect bounds) {
@@ -278,7 +274,6 @@ static void draw_rect(GContext *ctx, GRect bounds) {
   int rtick_x    = rbar_x + BAR_WIDTH;
   int lbl_r_x    = rtick_x + TICK_LEN;
 
-  // ---- Hour bar ----
   bool is_24h = s_settings.Show24h;
   int hour_px;
   if (is_24h) {
@@ -295,7 +290,6 @@ static void draw_rect(GContext *ctx, GRect bounds) {
     graphics_context_set_fill_color(ctx, eff_lit());
     graphics_fill_rect(ctx, GRect(lbar_x, bar_bottom - hour_px, BAR_WIDTH, hour_px), 0, GCornerNone);
   }
-  // 24h midpoint notch: background line separates AM from PM
   if (is_24h) {
     int notch_y = bar_bottom - bar_h / 2;
     graphics_context_set_stroke_color(ctx, eff_bg());
@@ -303,8 +297,6 @@ static void draw_rect(GContext *ctx, GRect bounds) {
     graphics_draw_line(ctx, GPoint(lbar_x, notch_y), GPoint(lbar_x + BAR_WIDTH - 1, notch_y));
   }
 
-  // Hour ticks and labels (left side)
-  // 12h: labels 01–12.  24h: labels every 2h (even numbers only, to fit)
   graphics_context_set_stroke_color(ctx, eff_text());
   graphics_context_set_stroke_width(ctx, 1);
   graphics_context_set_text_color(ctx, eff_text());
@@ -326,9 +318,7 @@ static void draw_rect(GContext *ctx, GRect bounds) {
     }
   }
 
-  // ---- Minute bar ----
   int min_px = (s_minute == 0) ? 0 : (bar_h * s_minute / 59);
-
   graphics_context_set_fill_color(ctx, eff_dim());
   graphics_fill_rect(ctx, GRect(rbar_x, bar_top, BAR_WIDTH, bar_h), 0, GCornerNone);
   if (min_px > 0) {
@@ -336,7 +326,6 @@ static void draw_rect(GContext *ctx, GRect bounds) {
     graphics_fill_rect(ctx, GRect(rbar_x, bar_bottom - min_px, BAR_WIDTH, min_px), 0, GCornerNone);
   }
 
-  // Minute ticks and labels (right side, every 5)
   graphics_context_set_stroke_color(ctx, eff_text());
   graphics_context_set_text_color(ctx, eff_text());
   for (int mn = 5; mn <= 60; mn += 5) {
@@ -351,14 +340,12 @@ static void draw_rect(GContext *ctx, GRect bounds) {
       GTextOverflowModeFill, GTextAlignmentLeft, NULL);
   }
 
-  // ---- Date ----
   graphics_context_set_text_color(ctx, eff_text());
   graphics_draw_text(ctx, s_date_buf,
     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
     GRect(0, date_y, w, DATE_HEIGHT + 4),
     GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 
-  // ---- Ring ----
   if (show_ring) draw_ring_rect(ctx, w, h);
 }
 #endif
@@ -366,11 +353,10 @@ static void draw_rect(GContext *ctx, GRect bounds) {
 // ============================================================
 // DRAW — ROUND PLATFORMS (Chalk, Emery)
 // ============================================================
-// Same two vertical bars. The circle boundary is used to determine
-// how far each horizontal tick line can extend — ticks reach from
-// the bar edge to ROUND_TICK_MARGIN px short of the circle edge at
-// that y position, with a label just inside the boundary.
-// Date fits in the gap between the two bars near the center.
+// Two vertical bars, centered on the face. Ticks extend horizontally
+// to ROUND_TICK_MARGIN px short of the circle boundary at each y.
+// Labels sit just inside the boundary. Date text sits below the bars,
+// horizontally centered across the full face width.
 #if defined(PBL_ROUND)
 static void draw_round(GContext *ctx, GRect bounds) {
   int w  = bounds.size.w;
@@ -380,17 +366,18 @@ static void draw_round(GContext *ctx, GRect bounds) {
   int r  = (w < h ? w : h) / 2;
 
   bool show_ring = s_settings.ShowRing;
-  // Usable radius inside the ring (or full radius if no ring)
   int cr = r - (show_ring ? (RING_THICK + RING_GAP) : 0);
 
-  // Bar vertical extents: span almost the full usable circle height
-  int bar_margin_v = 10;
-  int bar_top    = cy - cr + bar_margin_v;
-  int bar_bottom = cy + cr - bar_margin_v;
-  int bar_h      = bar_bottom - bar_top;
+  // Reserve space at the bottom for date text.
+  // bar_bottom stops ROUND_DATE_GAP + ROUND_DATE_H above the bottom of the usable area.
+  int usable_bottom = cy + cr - 6;   // 6px margin from usable circle edge
+  int usable_top    = cy - cr + 6;
+  int date_y        = usable_bottom - ROUND_DATE_H;
+  int bar_top       = usable_top;
+  int bar_bottom    = date_y - ROUND_DATE_GAP;
+  int bar_h         = bar_bottom - bar_top;
   if (bar_h < 10) bar_h = 10;
 
-  // Bar horizontal positions: centered
   int lbar_x = cx - ROUND_BAR_GAP / 2 - ROUND_BAR_W;
   int rbar_x = cx + ROUND_BAR_GAP / 2;
 
@@ -429,11 +416,6 @@ static void draw_round(GContext *ctx, GRect bounds) {
   }
 
   // ---- Ticks and labels ----
-  // For each tick at y, compute half-width of the usable circle at that row:
-  //   hw = sqrt(cr^2 - (y - cy)^2)
-  // Left tick:  from lbar_x-1 extending left  to cx - hw + ROUND_TICK_MARGIN
-  // Right tick: from rbar_x+ROUND_BAR_W right to cx + hw - ROUND_TICK_MARGIN
-  // Label sits at cx ± (hw - ROUND_LABEL_MARGIN)
   graphics_context_set_stroke_width(ctx, 1);
   graphics_context_set_text_color(ctx, eff_text());
 
@@ -445,7 +427,9 @@ static void draw_round(GContext *ctx, GRect bounds) {
         ? (bar_bottom - bar_h * hr / 23)
         : (bar_bottom - bar_h * hr / 12);
       int dy = ty - cy;
-      int hw = prv_isqrt(cr * cr - dy * dy);
+      int cr2 = cr * cr - dy * dy;
+      if (cr2 < 0) continue;
+      int hw = prv_isqrt(cr2);
       int tick_end = cx - hw + ROUND_TICK_MARGIN;
       if (tick_end < lbar_x - 1) {
         graphics_context_set_stroke_color(ctx, eff_text());
@@ -468,7 +452,9 @@ static void draw_round(GContext *ctx, GRect bounds) {
     int mn_src = (mn == 60) ? 59 : mn;
     int ty = bar_bottom - bar_h * mn_src / 59;
     int dy = ty - cy;
-    int hw = prv_isqrt(cr * cr - dy * dy);
+    int cr2 = cr * cr - dy * dy;
+    if (cr2 < 0) continue;
+    int hw = prv_isqrt(cr2);
     int tick_end = cx + hw - ROUND_TICK_MARGIN;
     if (tick_end > rbar_x + ROUND_BAR_W) {
       graphics_context_set_stroke_color(ctx, eff_text());
@@ -483,11 +469,11 @@ static void draw_round(GContext *ctx, GRect bounds) {
       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
   }
 
-  // ---- Date: in the gap between bars, near vertical center ----
+  // ---- Date: centered below the bars ----
   graphics_context_set_text_color(ctx, eff_text());
   graphics_draw_text(ctx, s_date_buf,
-    fonts_get_system_font(FONT_KEY_GOTHIC_14),
-    GRect(lbar_x + ROUND_BAR_W, cy - 8, ROUND_BAR_GAP, 16),
+    fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+    GRect(0, date_y, w, ROUND_DATE_H + 4),
     GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 
   // ---- Ring ----
