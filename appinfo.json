@@ -1,48 +1,35 @@
 {
-    "versionLabel": "2.1.1",
-    "uuid": "00b3c1f8-31e6-4e9a-8e16-fab218cf1983",
-    "appKeys": {
-        "invert": 0    
-    },
-    "longName": "Bar Graph",
-    "versionCode": 1,
-    "capabilities": [
-        "configurable"
-    ],
-    "shortName": "Bar Graph",
-    "companyName": "Cameron MacFarland",
-    "watchapp": {
-        "watchface": true
-    },
-    "resources": {
-        "media": [
-            {
-                "type": "font",
-                "name": "FONT_ARIAL_22",
-                "file": "fonts/arial.ttf"
-            },
-            {
-                "type": "png",
-                "name": "IMAGE_FACE",
-                "file": "images/face.png"
-            },
-            {
-                "menuIcon": true,
-                "type": "png",
-                "name": "IMAGE_MENU_ICON",
-                "file": "images/menu_icon.png"
-            }
-        ]
-    },
-    "preferences": {
-        "url" : "http://distantcam.github.io/Watchface-BarGraph/config/2.1/index.html",
-        "items": [{
-                "name": "invert",
-                "title": "Invert Display",
-                "type": "boolean",
-                "off-text": "Black",
-                "on-text": "White",
-                "default": false
-        }]
-    }
+  "uuid": "00b3c1f8-31e6-4e9a-8e16-fab218cf1983",
+  "shortName": "Bar Graph",
+  "longName": "Bar Graph 2",
+  "companyName": "Sterling Ely",
+  "versionLabel": "3.0",
+  "versionCode": 2,
+  "watchapp": {
+    "watchface": true
+  },
+  "capabilities": [
+    "configurable"
+  ],
+  "appKeys": {
+    "invert": 0
+  },
+  "targetPlatforms": [
+    "aplite",
+    "basalt",
+    "chalk",
+    "diorite",
+    "emery",
+    "flint"
+  ],
+  "resources": {
+    "media": [
+      {
+        "menuIcon": true,
+        "type": "png",
+        "name": "IMAGE_MENU_ICON",
+        "file": "images/menu_icon.png"
+      }
+    ]
+  }
 }
