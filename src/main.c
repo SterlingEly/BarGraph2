@@ -2,28 +2,29 @@
 
 // ============================================================
 // Bar Graph 2 — main.c
-// v2.1: exact replica of v1 layout — no ring, no dim track
-// Two vertical bars hugging screen edges:
-//   Left  = hours  (fills bottom-up)
-//   Right = minutes (fills bottom-up)
+// v2.2: layout fixes — correct label positions, no negatives
 // ============================================================
 
 #define SETTINGS_KEY 1
 
-// Rect layout (matched to v1 pixel measurements)
+// Rect layout
 #define BAR_W          30
-#define LABEL_W        26
-#define TICK_LEN        5
-#define DATE_H         22
-#define BAR_MARGIN_TOP  4
-#define BAR_MARGIN_BOT  4
+#define LABEL_W        24    // column for labels
+#define TICK_LEN        4    // outer tick line length
+#define DATE_H         20
+#define BAR_TOP         2    // top margin
+#define BAR_BOT         2    // gap above date row
 
 // Round layout
-#define ROUND_BAR_W    24
-#define ROUND_BAR_GAP  10
-#define ROUND_TICK_M   28
+#define ROUND_BAR_W    22
+#define ROUND_BAR_GAP   8
+#define ROUND_TICK_M   26
 #define ROUND_DATE_H   18
 #define ROUND_DATE_GAP  4
+
+// Font height for GOTHIC_14: cap ~10px, total ~14px. We center on tick.
+#define LABEL_H        14
+#define LABEL_HALF      7    // LABEL_H / 2
 
 static int prv_isqrt(int n) {
   if (n <= 0) return 0;
@@ -87,38 +88,55 @@ static char    s_date_buf[16];
 // DRAW HELPERS
 // ============================================================
 
-// Draw a vertical bar with tick separator lines.
-// Fills from bottom up. Ticks are bg-colored cuts across bar width.
+// Vertical bar, fills bottom-up. Tick cuts in bg color across full width.
 static void draw_bar(GContext *ctx,
                      int bx, int by, int bw, int bh,
-                     int filled_px, int tick_count,
+                     int filled_px, int num_segments,
                      GColor col_lit, GColor col_bg) {
+  // Lit fill
   if (filled_px > 0) {
+    int fy = by + bh - filled_px;
+    if (fy < by) { filled_px = bh; fy = by; }
     graphics_context_set_fill_color(ctx, col_lit);
-    graphics_fill_rect(ctx, GRect(bx, by + bh - filled_px, bw, filled_px), 0, GCornerNone);
+    graphics_fill_rect(ctx, GRect(bx, fy, bw, filled_px), 0, GCornerNone);
   }
-  for (int i = 1; i <= tick_count; i++) {
-    int ty = by + (bh * i) / (tick_count + 1);
+  // Segment separator lines (num_segments-1 internal lines for num_segments slots)
+  // Segments are equal height: line i is at by + bh * i / num_segments
+  for (int i = 1; i < num_segments; i++) {
+    int ty = by + (bh * i) / num_segments;
     graphics_context_set_fill_color(ctx, col_bg);
     graphics_fill_rect(ctx, GRect(bx, ty, bw, 1), 0, GCornerNone);
   }
 }
 
-// Draw short tick lines outside the bar edge
+// Short tick marks outside bar edge, at same positions as segment lines
 static void draw_outer_ticks(GContext *ctx,
                               int bx, int by, int bw, int bh,
-                              int tick_count, bool left_side,
+                              int num_segments, bool left_side,
                               int tick_len, GColor col) {
   graphics_context_set_stroke_color(ctx, col);
   graphics_context_set_stroke_width(ctx, 1);
-  for (int i = 1; i <= tick_count; i++) {
-    int ty = by + (bh * i) / (tick_count + 1);
+  for (int i = 1; i < num_segments; i++) {
+    int ty = by + (bh * i) / num_segments;
     if (left_side) {
       graphics_draw_line(ctx, GPoint(bx - tick_len, ty), GPoint(bx - 1, ty));
     } else {
       graphics_draw_line(ctx, GPoint(bx + bw, ty), GPoint(bx + bw + tick_len - 1, ty));
     }
   }
+}
+
+// Draw a label centered vertically on tick_y, clamped to [min_y, max_y]
+// Returns false if the label would be entirely outside bounds (skip it)
+static bool label_rect(int tick_y, int min_y, int max_y, GRect *out) {
+  int top = tick_y - LABEL_HALF;
+  int bot = top + LABEL_H;
+  // Clamp
+  if (top < min_y) top = min_y;
+  if (bot > max_y) bot = max_y;
+  if (bot - top < 6) return false;  // too squished, skip
+  *out = GRect(0, top, 0, bot - top);  // x/w filled in by caller
+  return true;
 }
 
 // ============================================================
@@ -137,54 +155,72 @@ static void draw_rect(GContext *ctx, int w, int h) {
   GColor col_txt = s_settings.DateTextColor;
 #endif
 
-  int bar_y = BAR_MARGIN_TOP;
-  int bar_h = h - BAR_MARGIN_TOP - BAR_MARGIN_BOT - DATE_H;
-  if (bar_h < 10) bar_h = 10;
+  int bar_y = BAR_TOP;
+  int bar_h = h - BAR_TOP - BAR_BOT - DATE_H;
+  if (bar_h < 20) bar_h = 20;
 
-  // Hour bar: [LABEL_W][TICK_LEN][BAR_W] from left edge
+  // Hour bar x: [LABEL_W][TICK_LEN][BAR_W=30] from left
   int hx = LABEL_W + TICK_LEN;
 
-  // Minute bar: [BAR_W][TICK_LEN][LABEL_W] from right edge
+  // Minute bar x: [BAR_W=30][TICK_LEN][LABEL_W] from right
   int mx = w - LABEL_W - TICK_LEN - BAR_W;
 
-  int max_h = show24 ? 24 : 12;
-  int dh    = show24 ? s_hour : (s_hour % 12);
-  int hfill = (bar_h * dh) / max_h;
-  int mfill = (s_minute == 0) ? 0 : (bar_h * s_minute) / 59;
-  int hticks = max_h - 1;
-  int mticks = 11;
+  // Label columns
+  int hour_label_x  = 0;
+  int min_label_x   = mx + BAR_W + TICK_LEN;
+  int min_label_w   = w - min_label_x;  // remaining px to right edge
 
-  draw_bar(ctx, hx, bar_y, BAR_W, bar_h, hfill, hticks, col_lit, col_bg);
-  draw_outer_ticks(ctx, hx, bar_y, BAR_W, bar_h, hticks, true, TICK_LEN, col_lit);
-  draw_bar(ctx, mx, bar_y, BAR_W, bar_h, mfill, mticks, col_lit, col_bg);
-  draw_outer_ticks(ctx, mx, bar_y, BAR_W, bar_h, mticks, false, TICK_LEN, col_lit);
+  // Segments: equal-height slots, one per hour / one per 5 min
+  int max_h    = show24 ? 24 : 12;
+  int dh       = show24 ? s_hour : (s_hour % 12);
+  // Fill: dh complete segments filled
+  int hfill_px = (bar_h * dh) / max_h;
+  // Minutes: 60 slots of equal height, s_minute slots filled
+  int mfill_px = (bar_h * s_minute) / 60;
 
-  // Hour labels (right-aligned, left of bar)
+  // Draw bars
+  draw_bar(ctx, hx, bar_y, BAR_W, bar_h, hfill_px, max_h, col_lit, col_bg);
+  draw_outer_ticks(ctx, hx, bar_y, BAR_W, bar_h, max_h, true, TICK_LEN, col_lit);
+  draw_bar(ctx, mx, bar_y, BAR_W, bar_h, mfill_px, 12, col_lit, col_bg);
+  draw_outer_ticks(ctx, mx, bar_y, BAR_W, bar_h, 12, false, TICK_LEN, col_lit);
+
+  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+  graphics_context_set_text_color(ctx, col_txt);
+
+  // Hour labels: at top of each segment boundary (i = 1..max_h)
+  // Position of segment top boundary i = bar_y + bar_h - (bar_h * i / max_h)
+  // i.e. bottom = bar_y+bar_h (=0h), top = bar_y (=max_h)
+  // Label every hour in 12h; every 2h in 24h
   {
-    GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
-    graphics_context_set_text_color(ctx, col_txt);
     char buf[4];
-    for (int i = 1; i <= max_h; i++) {
-      if (show24 && (i % 2 != 0)) continue;
-      int ty = bar_y + bar_h - (bar_h * i) / max_h;
-      snprintf(buf, sizeof(buf), show24 ? "%02d" : "%d", i);
+    int step = show24 ? 2 : 1;
+    for (int i = step; i <= max_h; i += step) {
+      int tick_y = bar_y + bar_h - (bar_h * i) / max_h;
+      // Clamp to drawable area
+      int ly = tick_y - LABEL_HALF;
+      if (ly < 0) ly = 0;
+      if (ly + LABEL_H > bar_y + bar_h) continue;
+      snprintf(buf, sizeof(buf), "%d", i);
       graphics_draw_text(ctx, buf, font,
-        GRect(0, ty - 8, LABEL_W, 16),
+        GRect(hour_label_x, ly, LABEL_W, LABEL_H),
         GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
     }
   }
 
-  // Minute labels (left-aligned, right of bar)
+  // Minute labels: every 5 min at segment boundary
+  // 12 segments of 5 min each. Boundary i (1..12) = i*5 minutes
+  // tick_y for boundary i = bar_y + bar_h - (bar_h * i / 12)
   {
-    GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
-    graphics_context_set_text_color(ctx, col_txt);
     char buf[4];
-    int lx = mx + BAR_W + TICK_LEN;
-    for (int m = 5; m <= 60; m += 5) {
-      int ty = bar_y + bar_h - (bar_h * m) / 60;
+    for (int i = 1; i <= 12; i++) {
+      int m = i * 5;
+      int tick_y = bar_y + bar_h - (bar_h * i) / 12;
+      int ly = tick_y - LABEL_HALF;
+      if (ly < 0) ly = 0;
+      if (ly + LABEL_H > bar_y + bar_h) continue;
       snprintf(buf, sizeof(buf), "%d", m);
       graphics_draw_text(ctx, buf, font,
-        GRect(lx, ty - 8, LABEL_W, 16),
+        GRect(min_label_x, ly, min_label_w, LABEL_H),
         GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
     }
   }
@@ -224,26 +260,25 @@ static void draw_round(GContext *ctx, int w, int h) {
   int hx      = cx - gap / 2 - bw;
   int mx      = cx + gap / 2;
 
-  int max_h  = show24 ? 24 : 12;
-  int dh     = show24 ? s_hour : (s_hour % 12);
-  int hfill  = (bar_h * dh) / max_h;
-  int mfill  = (s_minute == 0) ? 0 : (bar_h * s_minute) / 59;
-  int hticks = max_h - 1;
-  int mticks = 11;
+  int max_h    = show24 ? 24 : 12;
+  int dh       = show24 ? s_hour : (s_hour % 12);
+  int hfill_px = (bar_h * dh) / max_h;
+  int mfill_px = (bar_h * s_minute) / 60;
 
-  draw_bar(ctx, hx, bar_top, bw, bar_h, hfill, hticks, col_lit, col_bg);
-  draw_bar(ctx, mx, bar_top, bw, bar_h, mfill, mticks, col_lit, col_bg);
+  draw_bar(ctx, hx, bar_top, bw, bar_h, hfill_px, max_h, col_lit, col_bg);
+  draw_bar(ctx, mx, bar_top, bw, bar_h, mfill_px, 12,    col_lit, col_bg);
 
+  // Ticks to circle edge
   graphics_context_set_stroke_color(ctx, col_lit);
   graphics_context_set_stroke_width(ctx, 1);
-  for (int i = 1; i <= hticks; i++) {
-    int ty = bar_top + (bar_h * i) / (hticks + 1);
+  for (int i = 1; i < max_h; i++) {
+    int ty = bar_top + (bar_h * i) / max_h;
     int dy = ty - cy;
     int chord = (dy*dy < r*r) ? prv_isqrt(r*r - dy*dy) : 0;
     graphics_draw_line(ctx, GPoint(cx - chord, ty), GPoint(hx - 1, ty));
   }
-  for (int i = 1; i <= mticks; i++) {
-    int ty = bar_top + (bar_h * i) / (mticks + 1);
+  for (int i = 1; i < 12; i++) {
+    int ty = bar_top + (bar_h * i) / 12;
     int dy = ty - cy;
     int chord = (dy*dy < r*r) ? prv_isqrt(r*r - dy*dy) : 0;
     graphics_draw_line(ctx, GPoint(mx + bw, ty), GPoint(cx + chord, ty));
