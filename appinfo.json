@@ -13,17 +13,17 @@
   "targetPlatforms": [
     "aplite", "basalt", "chalk", "diorite", "emery", "flint", "gabbro"
   ],
-  "messageKeys": [
-    "BackgroundColor",
-    "BarLitColor",
-    "BarDimColor",
-    "DateTextColor",
-    "RingBattColor",
-    "RingStepsColor",
-    "RingDimColor",
-    "StepGoal",
-    "ShowRing",
-    "InvertBW",
-    "Show24h"
-  ]
+  "appKeys": {
+    "BackgroundColor": 0,
+    "BarLitColor": 1,
+    "BarDimColor": 2,
+    "DateTextColor": 3,
+    "RingBattColor": 4,
+    "RingStepsColor": 5,
+    "RingDimColor": 6,
+    "StepGoal": 7,
+    "ShowRing": 8,
+    "InvertBW": 9,
+    "Show24h": 10
+  }
 }
