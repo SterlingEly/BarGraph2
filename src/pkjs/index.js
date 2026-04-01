@@ -1,17 +1,14 @@
 // ============================================================
 // Bar Graph 2 — index.js (PebbleKit JS)
-// Handles Clay config + settings persistence via localStorage.
+// Handles config page + settings persistence via localStorage.
+// No pebble-clay dependency — config.js generates HTML directly.
 // ============================================================
 
-var Clay = require('pebble-clay');
-var clayConfig = require('./config');
-var clay = new Clay(clayConfig);
+var buildConfigPage = require('./config');
 
-// Hex string (#RRGGBB) → signed 32-bit int (for GColorFromHEX on watch)
+// Hex string (#RRGGBB) → integer for GColorFromHEX on watch
 function hexToInt(hex) {
-  var n = parseInt(hex.replace('#', ''), 16);
-  // GColorFromHEX expects the value as-is; no sign extension needed
-  return n;
+  return parseInt(hex.replace('#', ''), 16);
 }
 
 // Defaults mirror prv_default_settings() in main.c
@@ -69,7 +66,7 @@ function sendSettings(settings) {
   };
 
   Pebble.sendAppMessage(dict,
-    function()  { console.log('BG2: settings sent'); },
+    function()  { console.log('BG2: settings sent OK'); },
     function(e) { console.log('BG2: send error: ' + JSON.stringify(e)); }
   );
 }
@@ -79,9 +76,18 @@ Pebble.addEventListener('ready', function() {
   sendSettings(loadSettings());
 });
 
+Pebble.addEventListener('showConfiguration', function() {
+  var currentSettings = loadSettings();
+  Pebble.openURL(buildConfigPage(currentSettings));
+});
+
 Pebble.addEventListener('webviewclosed', function(e) {
-  if (!e || !e.response) return;
-  var settings = clay.getSettings(e.response);
-  saveSettings(settings);
-  sendSettings(settings);
+  if (!e || !e.response || e.response === 'CANCELLED') return;
+  try {
+    var settings = JSON.parse(decodeURIComponent(e.response));
+    saveSettings(settings);
+    sendSettings(settings);
+  } catch(err) {
+    console.log('BG2: failed to parse settings: ' + err);
+  }
 });
