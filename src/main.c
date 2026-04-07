@@ -1,30 +1,30 @@
 #include <pebble.h>
 
 // ============================================================
-// Bar Graph 2 — main.c
-// v2.2: layout fixes — correct label positions, no negatives
+// Bar Graph 2 — main.c  v2.12
+// Aplite/diorite/flint layout locked.
+// Fixes:
+//   1. Separator cut only when fill strictly above line (ty > fill_top)
+//   2. Top and bottom border lines at bar_top and bar_bot
 // ============================================================
 
 #define SETTINGS_KEY 1
 
-// Rect layout
-#define BAR_W          30
-#define LABEL_W        24    // column for labels
-#define TICK_LEN        4    // outer tick line length
-#define DATE_H         20
-#define BAR_TOP         2    // top margin
-#define BAR_BOT         2    // gap above date row
+#define V1_BAR_BOT  132
+#define V1_BAR_TOP   12
+#define V1_HX        38
+#define V1_BAR_W     30
+#define V1_MX        76
+#define V1_DATE_Y   138
+#define V1_SLOT_H    10
+#define NUB_PX        8
+#define GAP_PX        8
 
-// Round layout
 #define ROUND_BAR_W    22
-#define ROUND_BAR_GAP   8
-#define ROUND_TICK_M   26
-#define ROUND_DATE_H   18
+#define ROUND_BAR_GAP  10
+#define ROUND_DATE_H   20
 #define ROUND_DATE_GAP  4
-
-// Font height for GOTHIC_14: cap ~10px, total ~14px. We center on tick.
-#define LABEL_H        14
-#define LABEL_HALF      7    // LABEL_H / 2
+#define ROUND_MARGIN   26
 
 static int prv_isqrt(int n) {
   if (n <= 0) return 0;
@@ -33,9 +33,6 @@ static int prv_isqrt(int n) {
   return x;
 }
 
-// ============================================================
-// SETTINGS
-// ============================================================
 typedef struct {
   GColor BackgroundColor;
   GColor BarLitColor;
@@ -75,73 +72,30 @@ static void prv_load_settings(void) {
   persist_read_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
 }
 
-// ============================================================
-// STATE
-// ============================================================
-static Window *s_window;
-static Layer  *s_canvas_layer;
-static int     s_hour   = 0;
-static int     s_minute = 0;
-static char    s_date_buf[16];
+static Window  *s_window;
+static Layer   *s_canvas_layer;
+static GFont    s_font_label;
+static GFont    s_font_date;
+static bool     s_custom_fonts = false;
+static int      s_hour   = 0;
+static int      s_minute = 0;
+static char     s_date_buf[16];
 
-// ============================================================
-// DRAW HELPERS
-// ============================================================
-
-// Vertical bar, fills bottom-up. Tick cuts in bg color across full width.
-static void draw_bar(GContext *ctx,
-                     int bx, int by, int bw, int bh,
-                     int filled_px, int num_segments,
-                     GColor col_lit, GColor col_bg) {
-  // Lit fill
-  if (filled_px > 0) {
-    int fy = by + bh - filled_px;
-    if (fy < by) { filled_px = bh; fy = by; }
-    graphics_context_set_fill_color(ctx, col_lit);
-    graphics_fill_rect(ctx, GRect(bx, fy, bw, filled_px), 0, GCornerNone);
-  }
-  // Segment separator lines (num_segments-1 internal lines for num_segments slots)
-  // Segments are equal height: line i is at by + bh * i / num_segments
-  for (int i = 1; i < num_segments; i++) {
-    int ty = by + (bh * i) / num_segments;
-    graphics_context_set_fill_color(ctx, col_bg);
-    graphics_fill_rect(ctx, GRect(bx, ty, bw, 1), 0, GCornerNone);
-  }
-}
-
-// Short tick marks outside bar edge, at same positions as segment lines
-static void draw_outer_ticks(GContext *ctx,
-                              int bx, int by, int bw, int bh,
-                              int num_segments, bool left_side,
-                              int tick_len, GColor col) {
+static void draw_bar_borders(GContext *ctx,
+                             int bx, int bw, int bar_top, int bar_bot,
+                             bool left_nub, bool right_nub, int nub,
+                             GColor col) {
   graphics_context_set_stroke_color(ctx, col);
   graphics_context_set_stroke_width(ctx, 1);
-  for (int i = 1; i < num_segments; i++) {
-    int ty = by + (bh * i) / num_segments;
-    if (left_side) {
-      graphics_draw_line(ctx, GPoint(bx - tick_len, ty), GPoint(bx - 1, ty));
-    } else {
-      graphics_draw_line(ctx, GPoint(bx + bw, ty), GPoint(bx + bw + tick_len - 1, ty));
-    }
-  }
+  graphics_draw_line(ctx, GPoint(bx, bar_bot), GPoint(bx + bw - 1, bar_bot));
+  if (left_nub)  graphics_draw_line(ctx, GPoint(bx - nub, bar_bot), GPoint(bx - 1, bar_bot));
+  if (right_nub) graphics_draw_line(ctx, GPoint(bx + bw, bar_bot), GPoint(bx + bw + nub - 1, bar_bot));
+  graphics_draw_line(ctx, GPoint(bx, bar_top), GPoint(bx + bw - 1, bar_top));
+  if (left_nub)  graphics_draw_line(ctx, GPoint(bx - nub, bar_top), GPoint(bx - 1, bar_top));
+  if (right_nub) graphics_draw_line(ctx, GPoint(bx + bw, bar_top), GPoint(bx + bw + nub - 1, bar_top));
 }
 
-// Draw a label centered vertically on tick_y, clamped to [min_y, max_y]
-// Returns false if the label would be entirely outside bounds (skip it)
-static bool label_rect(int tick_y, int min_y, int max_y, GRect *out) {
-  int top = tick_y - LABEL_HALF;
-  int bot = top + LABEL_H;
-  // Clamp
-  if (top < min_y) top = min_y;
-  if (bot > max_y) bot = max_y;
-  if (bot - top < 6) return false;  // too squished, skip
-  *out = GRect(0, top, 0, bot - top);  // x/w filled in by caller
-  return true;
-}
-
-// ============================================================
-// RECT DRAW
-// ============================================================
+#if !defined(PBL_ROUND)
 static void draw_rect(GContext *ctx, int w, int h) {
   bool show24 = s_settings.Show24h;
 
@@ -155,87 +109,114 @@ static void draw_rect(GContext *ctx, int w, int h) {
   GColor col_txt = s_settings.DateTextColor;
 #endif
 
-  int bar_y = BAR_TOP;
-  int bar_h = h - BAR_TOP - BAR_BOT - DATE_H;
-  if (bar_h < 20) bar_h = 20;
+  int hx      = (V1_HX      * w) / 144;
+  int bw      = (V1_BAR_W   * w) / 144;
+  int mx      = (V1_MX      * w) / 144;
+  int bar_bot = (V1_BAR_BOT * h) / 168;
+  int slot_h  = (V1_SLOT_H  * h) / 168;
+  int date_y  = (V1_DATE_Y  * h) / 168;
 
-  // Hour bar x: [LABEL_W][TICK_LEN][BAR_W=30] from left
-  int hx = LABEL_W + TICK_LEN;
+  if (slot_h < 2) slot_h = 2;
+  if (bw < 20) bw = 20;
 
-  // Minute bar x: [BAR_W=30][TICK_LEN][LABEL_W] from right
-  int mx = w - LABEL_W - TICK_LEN - BAR_W;
+  int bar_h   = slot_h * 12;
+  int bar_top = bar_bot - bar_h;
 
-  // Label columns
-  int hour_label_x  = 0;
-  int min_label_x   = mx + BAR_W + TICK_LEN;
-  int min_label_w   = w - min_label_x;  // remaining px to right edge
+  int max_h = show24 ? 24 : 12;
+  int dh    = show24 ? s_hour : (s_hour % 12);
+  int hfill = show24 ? (bar_h * dh / 24) : (slot_h * dh);
+  int mfill = (slot_h * s_minute) / 5;
 
-  // Segments: equal-height slots, one per hour / one per 5 min
-  int max_h    = show24 ? 24 : 12;
-  int dh       = show24 ? s_hour : (s_hour % 12);
-  // Fill: dh complete segments filled
-  int hfill_px = (bar_h * dh) / max_h;
-  // Minutes: 60 slots of equal height, s_minute slots filled
-  int mfill_px = (bar_h * s_minute) / 60;
+  int h_fill_top = bar_bot - hfill;
+  int m_fill_top = bar_bot - mfill;
 
-  // Draw bars
-  draw_bar(ctx, hx, bar_y, BAR_W, bar_h, hfill_px, max_h, col_lit, col_bg);
-  draw_outer_ticks(ctx, hx, bar_y, BAR_W, bar_h, max_h, true, TICK_LEN, col_lit);
-  draw_bar(ctx, mx, bar_y, BAR_W, bar_h, mfill_px, 12, col_lit, col_bg);
-  draw_outer_ticks(ctx, mx, bar_y, BAR_W, bar_h, 12, false, TICK_LEN, col_lit);
+  int h_label_w = hx - NUB_PX - GAP_PX;
+  int m_label_x = mx + bw + NUB_PX + GAP_PX;
+  int m_label_w = w - m_label_x;
+  int lh = 11;
 
-  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
-  graphics_context_set_text_color(ctx, col_txt);
+  // 1. Tick lines + nubs
+  graphics_context_set_stroke_width(ctx, 1);
+  graphics_context_set_stroke_color(ctx, col_lit);
+  for (int i = 1; i < 12; i++) {
+    int ty = bar_bot - slot_h * i;
+    graphics_draw_line(ctx, GPoint(hx,           ty), GPoint(hx + bw - 1,           ty));
+    graphics_draw_line(ctx, GPoint(mx,           ty), GPoint(mx + bw - 1,           ty));
+    graphics_draw_line(ctx, GPoint(hx - NUB_PX, ty), GPoint(hx - 1,                ty));
+    graphics_draw_line(ctx, GPoint(mx + bw,      ty), GPoint(mx + bw + NUB_PX - 1, ty));
+  }
 
-  // Hour labels: at top of each segment boundary (i = 1..max_h)
-  // Position of segment top boundary i = bar_y + bar_h - (bar_h * i / max_h)
-  // i.e. bottom = bar_y+bar_h (=0h), top = bar_y (=max_h)
-  // Label every hour in 12h; every 2h in 24h
-  {
-    char buf[4];
-    int step = show24 ? 2 : 1;
-    for (int i = step; i <= max_h; i += step) {
-      int tick_y = bar_y + bar_h - (bar_h * i) / max_h;
-      // Clamp to drawable area
-      int ly = tick_y - LABEL_HALF;
-      if (ly < 0) ly = 0;
-      if (ly + LABEL_H > bar_y + bar_h) continue;
-      snprintf(buf, sizeof(buf), "%d", i);
-      graphics_draw_text(ctx, buf, font,
-        GRect(hour_label_x, ly, LABEL_W, LABEL_H),
-        GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
+  // 2. Top/bottom border lines
+  draw_bar_borders(ctx, hx, bw, bar_top, bar_bot, true,  false, NUB_PX, col_lit);
+  draw_bar_borders(ctx, mx, bw, bar_top, bar_bot, false, true,  NUB_PX, col_lit);
+
+  // 3. Bar fills
+  if (hfill > 0) {
+    graphics_context_set_fill_color(ctx, col_lit);
+    graphics_fill_rect(ctx, GRect(hx, h_fill_top, bw, hfill), 0, GCornerNone);
+  }
+  if (mfill > 0) {
+    graphics_context_set_fill_color(ctx, col_lit);
+    graphics_fill_rect(ctx, GRect(mx, m_fill_top, bw, mfill), 0, GCornerNone);
+  }
+
+  // 4. Separator cuts — strictly inside filled region only
+  graphics_context_set_fill_color(ctx, col_bg);
+  for (int i = 1; i < 12; i++) {
+    int ty = bar_bot - slot_h * i;
+    if (hfill > 0 && ty > h_fill_top && ty < bar_bot)
+      graphics_fill_rect(ctx, GRect(hx, ty, bw, 1), 0, GCornerNone);
+    if (mfill > 0 && ty > m_fill_top && ty < bar_bot)
+      graphics_fill_rect(ctx, GRect(mx, ty, bw, 1), 0, GCornerNone);
+  }
+
+  // 24h: half-slot cuts on hour bar
+  if (show24 && hfill > 0) {
+    graphics_context_set_fill_color(ctx, col_bg);
+    for (int i = 0; i < 12; i++) {
+      int ty = bar_bot - slot_h * i - slot_h / 2;
+      if (ty > bar_top && ty < bar_bot && ty > h_fill_top)
+        graphics_fill_rect(ctx, GRect(hx, ty, bw, 1), 0, GCornerNone);
     }
   }
 
-  // Minute labels: every 5 min at segment boundary
-  // 12 segments of 5 min each. Boundary i (1..12) = i*5 minutes
-  // tick_y for boundary i = bar_y + bar_h - (bar_h * i / 12)
+  // 5. Labels
+  graphics_context_set_text_color(ctx, col_txt);
   {
     char buf[4];
-    for (int i = 1; i <= 12; i++) {
-      int m = i * 5;
-      int tick_y = bar_y + bar_h - (bar_h * i) / 12;
-      int ly = tick_y - LABEL_HALF;
-      if (ly < 0) ly = 0;
-      if (ly + LABEL_H > bar_y + bar_h) continue;
-      snprintf(buf, sizeof(buf), "%d", m);
-      graphics_draw_text(ctx, buf, font,
-        GRect(min_label_x, ly, min_label_w, LABEL_H),
+    int step = show24 ? 2 : 1;
+    for (int i = 0; i <= max_h; i += step) {
+      int ty = bar_bot - (show24 ? (bar_h * i / 24) : (slot_h * i));
+      int ly = ty - lh / 2;
+      if (ly + lh < bar_top - lh || ly > bar_bot + lh) continue;
+      snprintf(buf, sizeof(buf), "%02d", i);
+      graphics_draw_text(ctx, buf, s_font_label,
+        GRect(0, ly, h_label_w, lh),
+        GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
+    }
+  }
+  {
+    char buf[4];
+    for (int i = 0; i <= 12; i++) {
+      int ty = bar_bot - slot_h * i;
+      int ly = ty - lh / 2;
+      if (ly + lh < bar_top - lh || ly > bar_bot + lh) continue;
+      snprintf(buf, sizeof(buf), "%02d", i * 5);
+      graphics_draw_text(ctx, buf, s_font_label,
+        GRect(m_label_x, ly, m_label_w, lh),
         GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
     }
   }
 
-  // Date
+  // 6. Date
   graphics_context_set_text_color(ctx, col_txt);
-  graphics_draw_text(ctx, s_date_buf,
-    fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-    GRect(0, h - DATE_H, w, DATE_H),
+  graphics_draw_text(ctx, s_date_buf, s_font_date,
+    GRect(0, date_y, w, h - date_y),
     GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
 }
+#endif
 
-// ============================================================
-// ROUND DRAW
-// ============================================================
+#if defined(PBL_ROUND)
 static void draw_round(GContext *ctx, int w, int h) {
   bool show24 = s_settings.Show24h;
   int cx = w / 2, cy = h / 2, r = cx;
@@ -254,50 +235,74 @@ static void draw_round(GContext *ctx, int w, int h) {
   int gap     = ROUND_BAR_GAP;
   int date_h  = ROUND_DATE_H;
   int dgap    = ROUND_DATE_GAP;
-  int bar_h   = h - ROUND_TICK_M * 2 - date_h - dgap;
-  if (bar_h < 10) bar_h = 10;
+  int slot_h  = (h - ROUND_MARGIN * 2 - date_h - dgap) / 12;
+  if (slot_h < 2) slot_h = 2;
+  int bar_h   = slot_h * 12;
   int bar_top = (h - bar_h - date_h - dgap) / 2;
+  int bar_bot = bar_top + bar_h;
   int hx      = cx - gap / 2 - bw;
   int mx      = cx + gap / 2;
 
-  int max_h    = show24 ? 24 : 12;
-  int dh       = show24 ? s_hour : (s_hour % 12);
-  int hfill_px = (bar_h * dh) / max_h;
-  int mfill_px = (bar_h * s_minute) / 60;
+  int dh         = show24 ? s_hour : (s_hour % 12);
+  int hfill      = show24 ? (bar_h * dh / 24) : (slot_h * dh);
+  int mfill      = (slot_h * s_minute) / 5;
+  int h_fill_top = bar_bot - hfill;
+  int m_fill_top = bar_bot - mfill;
 
-  draw_bar(ctx, hx, bar_top, bw, bar_h, hfill_px, max_h, col_lit, col_bg);
-  draw_bar(ctx, mx, bar_top, bw, bar_h, mfill_px, 12,    col_lit, col_bg);
-
-  // Ticks to circle edge
-  graphics_context_set_stroke_color(ctx, col_lit);
   graphics_context_set_stroke_width(ctx, 1);
-  for (int i = 1; i < max_h; i++) {
-    int ty = bar_top + (bar_h * i) / max_h;
-    int dy = ty - cy;
-    int chord = (dy*dy < r*r) ? prv_isqrt(r*r - dy*dy) : 0;
-    graphics_draw_line(ctx, GPoint(cx - chord, ty), GPoint(hx - 1, ty));
-  }
+  graphics_context_set_stroke_color(ctx, col_lit);
   for (int i = 1; i < 12; i++) {
-    int ty = bar_top + (bar_h * i) / 12;
+    int ty = bar_bot - slot_h * i;
     int dy = ty - cy;
     int chord = (dy*dy < r*r) ? prv_isqrt(r*r - dy*dy) : 0;
-    graphics_draw_line(ctx, GPoint(mx + bw, ty), GPoint(cx + chord, ty));
+    graphics_draw_line(ctx, GPoint(hx,         ty), GPoint(hx + bw - 1, ty));
+    graphics_draw_line(ctx, GPoint(mx,         ty), GPoint(mx + bw - 1, ty));
+    graphics_draw_line(ctx, GPoint(cx - chord, ty), GPoint(hx - 1,      ty));
+    graphics_draw_line(ctx, GPoint(mx + bw,    ty), GPoint(cx + chord,  ty));
+  }
+  {
+    int dy_bot    = bar_bot - cy;
+    int c_bot     = (dy_bot*dy_bot < r*r) ? prv_isqrt(r*r - dy_bot*dy_bot) : 0;
+    int dy_top    = bar_top - cy;
+    int c_top     = (dy_top*dy_top < r*r) ? prv_isqrt(r*r - dy_top*dy_top) : 0;
+    graphics_draw_line(ctx, GPoint(hx, bar_bot), GPoint(hx + bw - 1, bar_bot));
+    graphics_draw_line(ctx, GPoint(mx, bar_bot), GPoint(mx + bw - 1, bar_bot));
+    graphics_draw_line(ctx, GPoint(cx - c_bot, bar_bot), GPoint(hx - 1, bar_bot));
+    graphics_draw_line(ctx, GPoint(mx + bw, bar_bot),    GPoint(cx + c_bot, bar_bot));
+    graphics_draw_line(ctx, GPoint(hx, bar_top), GPoint(hx + bw - 1, bar_top));
+    graphics_draw_line(ctx, GPoint(mx, bar_top), GPoint(mx + bw - 1, bar_top));
+    graphics_draw_line(ctx, GPoint(cx - c_top, bar_top), GPoint(hx - 1, bar_top));
+    graphics_draw_line(ctx, GPoint(mx + bw, bar_top),    GPoint(cx + c_top, bar_top));
+  }
+
+  if (hfill > 0) {
+    graphics_context_set_fill_color(ctx, col_lit);
+    graphics_fill_rect(ctx, GRect(hx, h_fill_top, bw, hfill), 0, GCornerNone);
+  }
+  if (mfill > 0) {
+    graphics_context_set_fill_color(ctx, col_lit);
+    graphics_fill_rect(ctx, GRect(mx, m_fill_top, bw, mfill), 0, GCornerNone);
+  }
+
+  graphics_context_set_fill_color(ctx, col_bg);
+  for (int i = 1; i < 12; i++) {
+    int ty = bar_bot - slot_h * i;
+    if (hfill > 0 && ty > h_fill_top && ty < bar_bot)
+      graphics_fill_rect(ctx, GRect(hx, ty, bw, 1), 0, GCornerNone);
+    if (mfill > 0 && ty > m_fill_top && ty < bar_bot)
+      graphics_fill_rect(ctx, GRect(mx, ty, bw, 1), 0, GCornerNone);
   }
 
   graphics_context_set_text_color(ctx, col_txt);
-  graphics_draw_text(ctx, s_date_buf,
-    fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-    GRect(0, bar_top + bar_h + dgap, w, date_h),
+  graphics_draw_text(ctx, s_date_buf, s_font_date,
+    GRect(0, bar_bot + dgap, w, date_h),
     GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
 }
+#endif
 
-// ============================================================
-// MAIN DRAW CALLBACK
-// ============================================================
 static void draw_layer(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
   int w = bounds.size.w, h = bounds.size.h;
-
 #if defined(PBL_BW)
   GColor col_bg = s_settings.InvertBW ? GColorWhite : GColorBlack;
 #else
@@ -305,7 +310,6 @@ static void draw_layer(Layer *layer, GContext *ctx) {
 #endif
   graphics_context_set_fill_color(ctx, col_bg);
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
-
 #if defined(PBL_ROUND)
   draw_round(ctx, w, h);
 #else
@@ -313,9 +317,6 @@ static void draw_layer(Layer *layer, GContext *ctx) {
 #endif
 }
 
-// ============================================================
-// EVENT HANDLERS
-// ============================================================
 static void tick_handler(struct tm *t, TimeUnits u) {
   s_hour   = t->tm_hour;
   s_minute = t->tm_min;
@@ -351,9 +352,6 @@ static void inbox_received(DictionaryIterator *iter, void *context) {
   layer_mark_dirty(s_canvas_layer);
 }
 
-// ============================================================
-// WINDOW / APP LIFECYCLE
-// ============================================================
 static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   s_canvas_layer = layer_create(layer_get_bounds(root));
@@ -367,6 +365,15 @@ static void window_unload(Window *window) {
 
 static void init(void) {
   prv_load_settings();
+#ifdef RESOURCE_ID_FONT_ARIAL_10
+  s_font_label   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ARIAL_10));
+  s_font_date    = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ARIAL_18));
+  s_custom_fonts = true;
+#else
+  s_font_label   = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+  s_font_date    = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
+  s_custom_fonts = false;
+#endif
   s_window = window_create();
   window_set_background_color(s_window, GColorBlack);
   window_set_window_handlers(s_window, (WindowHandlers){
@@ -383,6 +390,10 @@ static void init(void) {
 
 static void deinit(void) {
   tick_timer_service_unsubscribe();
+  if (s_custom_fonts) {
+    fonts_unload_custom_font(s_font_label);
+    fonts_unload_custom_font(s_font_date);
+  }
   window_destroy(s_window);
 }
 
