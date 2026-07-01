@@ -2,6 +2,8 @@
 
 A Pebble watchface displaying time as two vertical bar graphs — hours on the left, minutes on the right — with labeled tick marks and an optional battery/step ring.
 
+> **AI collaborators / new contributors:** Read [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) before making any code changes. It contains the authoritative session seed, build rules, architecture, and known traps.
+
 ---
 
 ## The idea
@@ -22,20 +24,21 @@ It's a watchface that looks like data visualization, because it is.
 - **Outer ring** — battery level (right half) and step count (left half)
 - **Configurable colors** for bars, labels, and ring segments
 - **B&W invert** option for aplite/diorite
-- **All platforms** — Aplite, Basalt, Chalk, Diorite, Emery, Flint
+- **All platforms** — Aplite, Basalt, Chalk, Diorite, Emery, Flint, Gabbro
 
 ---
 
 ## Platforms
 
-| Platform | Watch | Resolution |
-|----------|-------|------------|
-| Aplite   | Pebble Classic / Steel | 144×168 (B&W) |
-| Basalt   | Pebble Time / Steel | 144×168 (color) |
-| Chalk    | Pebble Time Round | 180×180 (color) |
-| Diorite  | Pebble 2 | 144×168 (B&W) |
-| Emery    | Pebble Time 2 | 200×228 (color) |
-| Flint    | Pebble 2 Duo | 144×168 (color) |
+| Platform | Watch | Resolution | Color |
+|----------|-------|------------|-------|
+| Aplite   | Pebble Classic / Steel | 144×168 | B&W |
+| Basalt   | Pebble Time / Steel | 144×168 | Color |
+| Chalk    | Pebble Time Round | 180×180 | Color, round |
+| Diorite  | Pebble 2 SE | 144×168 | B&W |
+| Emery    | Pebble Time 2 | 200×228 | Color, hi-res |
+| Flint    | Pebble 2 | 144×168 | B&W |
+| Gabbro   | Pebble Round 2 | 260×260 | Color, round |
 
 ---
 
@@ -61,7 +64,7 @@ GitHub: [SterlingEly/BarGraph2](https://github.com/SterlingEly/BarGraph2)
 
 ## Building
 
-Built with the Pebble SDK (CloudPebble or local SDK). No external dependencies.
+Built with the Pebble SDK (CloudPebble or local SDK). No external dependencies beyond `arial.ttf` (sourced from the original v1 repo).
 
 ```
 pebble build
@@ -70,9 +73,11 @@ pebble install --emulator basalt
 
 Source files:
 - `src/main.c` — all drawing, event handling, settings persistence
-- `src/pkjs/config.js` — config page HTML/JS
-- `src/pkjs/index.js` — PebbleKit JS: settings relay
+- `src/pkjs/config.js` — config page HTML/JS (self-contained, no pebble-clay)
+- `src/pkjs/index.js` — PebbleKit JS: settings relay and localStorage persistence
 - `appinfo.json` — message keys, target platforms
+
+See [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) for full build rules, CloudPebble-specific requirements, and known traps.
 
 ---
 
