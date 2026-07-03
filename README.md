@@ -2,7 +2,9 @@
 
 A Pebble watchface displaying time as two vertical bar graphs — hours on the left, minutes on the right — with labeled tick marks and an optional battery/step ring.
 
-> **AI collaborators / new contributors:** Read [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) before making any code changes. It contains the authoritative session seed, build rules, architecture, and known traps.
+**Current status:** In development. Aplite/diorite/flint layout locked at v2.12. Emery, basalt, and round platforms pending. Not yet submitted to the app store.
+
+> **AI collaborators and technical contributors:** Read [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) before making any code changes. It contains the authoritative architecture reference, build rules, known traps, and current TODO.
 
 ---
 
@@ -10,7 +12,7 @@ A Pebble watchface displaying time as two vertical bar graphs — hours on the l
 
 The premise is simple: your watch face is a bar chart.
 
-The left bar fills to the current hour. The right bar fills to the current minute. Tick marks cross through the fill at each interval — visible as separators through both the lit and dim regions — so the scale is always readable no matter where the fill line sits. Labels along the outer edges keep everything explicit.
+The left bar fills to the current hour. The right bar fills to the current minute. Tick marks cross through the fill at each interval — visible as separators through both the filled and unfilled regions — so the scale is always readable no matter where the fill line sits. Labels along the outer edges keep everything explicit.
 
 It's a watchface that looks like data visualization, because it is.
 
@@ -19,12 +21,12 @@ It's a watchface that looks like data visualization, because it is.
 ## Features
 
 - **Hour bar (left) and minute bar (right)** with labeled tick marks
-- **Tick separators** visible through both lit and dim bar regions
+- **Tick separators** visible through both filled and unfilled bar regions
 - **12h and 24h** display modes
-- **Outer ring** — battery level (right half) and step count (left half)
+- **Outer ring** — battery level (right half) and step count (left half) — reserved for future release
 - **Configurable colors** for bars, labels, and ring segments
-- **B&W invert** option for aplite/diorite
-- **All platforms** — Aplite, Basalt, Chalk, Diorite, Emery, Flint, Gabbro
+- **B&W invert** option for aplite/diorite/flint
+- **All 7 platforms** — Aplite, Basalt, Chalk, Diorite, Emery, Flint, Gabbro
 
 ---
 
@@ -45,7 +47,7 @@ It's a watchface that looks like data visualization, because it is.
 ## History & credits
 
 **2013 — Original design (Sterling Ely)**
-The bar graph watchface concept was designed by Sterling Ely for the original Pebble in 2013.
+The bar graph watchface concept was designed by Sterling Ely for the original Pebble.
 
 **April–August 2013 — Implementation (Cameron MacFarland / distantcam)**
 Cameron MacFarland built the original implementation.
@@ -58,13 +60,12 @@ Appstore: [apps.repebble.com](https://apps.repebble.com/en_US/application/5305a5
 
 **March 2026 — Bar Graph 2 (Sterling Ely & Claude)**
 A full rebuild for all modern Pebble platforms, forked from [distantcam/Watchface-BarGraph](https://github.com/distantcam/Watchface-BarGraph). Sterling Ely led design and direction; Claude (Anthropic) handled technical implementation. Adds color support, configurable ring, 12h/24h mode, tick separators through bar fill, and round platform support.
-GitHub: [SterlingEly/BarGraph2](https://github.com/SterlingEly/BarGraph2)
 
 ---
 
 ## Building
 
-Built with the Pebble SDK (CloudPebble or local SDK). No external dependencies beyond `arial.ttf` (sourced from the original v1 repo).
+Built with the Pebble SDK via CloudPebble. Requires `arial.ttf` registered as a font resource in CloudPebble (see `PROJECT_CONTEXT.md`).
 
 ```
 pebble build
@@ -78,6 +79,17 @@ Source files:
 - `appinfo.json` — message keys, target platforms
 
 See [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) for full build rules, CloudPebble-specific requirements, and known traps.
+
+---
+
+## Related projects
+
+| Repository | Summary |
+|------------|---------|
+| [Radium 2](https://github.com/SterlingEly/Radium2) | Radial time display; released on Rebble store |
+| [TallBoy](https://github.com/SterlingEly/TallBoy) | Oversized vector-drawn digits; all platforms |
+| [Monogram](https://github.com/SterlingEly/Monogram) | Custom monogram-style digit watchface; early development |
+| [Pixel Sampler](https://github.com/SterlingEly/PixelSampler) | Developer reference app for Pebble fonts, colors, and platform capabilities |
 
 ---
 
