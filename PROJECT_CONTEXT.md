@@ -53,7 +53,6 @@ Sterling makes all product and design decisions. AI proposes and implements; Ste
 ```
 SterlingEly/BarGraph2 (master)
 ├── PROJECT_CONTEXT.md     ← authoritative technical reference (this file)
-├── CONTEXT_BARGRAPH2.md   ← legacy stub; redirects here
 ├── README.md              ← human-facing overview
 ├── appinfo.json           ← message keys as appKeys{} object
 └── src/
