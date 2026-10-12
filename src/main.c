@@ -1,22 +1,23 @@
 #include <pebble.h>
 
 // ============================================================
-// Bar Graph 2 — main.c  v2.12
-// Aplite/diorite/flint layout locked.
+// Bar Graph 2 — main.c  v2.13 (slot 12px, bar top y=4, label font Arial 11)
 // Fixes:
-//   1. Separator cut only when fill strictly above line (ty > fill_top)
+//   1. Separator cut: only when ty > h_fill_top (fill strictly
+//      above the line, not just at it) — prevents premature flip
 //   2. Top and bottom border lines at bar_top and bar_bot
+//      spanning bar width + nubs on both bars
 // ============================================================
 
 #define SETTINGS_KEY 1
 
-#define V1_BAR_BOT  132
-#define V1_BAR_TOP   12
+#define V1_BAR_BOT  148
+#define V1_BAR_TOP    4
 #define V1_HX        38
 #define V1_BAR_W     30
 #define V1_MX        76
-#define V1_DATE_Y   138
-#define V1_SLOT_H    10
+#define V1_DATE_Y   148
+#define V1_SLOT_H    12
 #define NUB_PX        8
 #define GAP_PX        8
 
@@ -81,20 +82,27 @@ static int      s_hour   = 0;
 static int      s_minute = 0;
 static char     s_date_buf[16];
 
+// Draw the top+bottom border lines for one bar (at bar_top and bar_bot)
+// plus nubs extending outward.
 static void draw_bar_borders(GContext *ctx,
                              int bx, int bw, int bar_top, int bar_bot,
                              bool left_nub, bool right_nub, int nub,
                              GColor col) {
   graphics_context_set_stroke_color(ctx, col);
   graphics_context_set_stroke_width(ctx, 1);
+  // Bottom border (00 line)
   graphics_draw_line(ctx, GPoint(bx, bar_bot), GPoint(bx + bw - 1, bar_bot));
   if (left_nub)  graphics_draw_line(ctx, GPoint(bx - nub, bar_bot), GPoint(bx - 1, bar_bot));
   if (right_nub) graphics_draw_line(ctx, GPoint(bx + bw, bar_bot), GPoint(bx + bw + nub - 1, bar_bot));
+  // Top border (12 line)
   graphics_draw_line(ctx, GPoint(bx, bar_top), GPoint(bx + bw - 1, bar_top));
   if (left_nub)  graphics_draw_line(ctx, GPoint(bx - nub, bar_top), GPoint(bx - 1, bar_top));
   if (right_nub) graphics_draw_line(ctx, GPoint(bx + bw, bar_top), GPoint(bx + bw + nub - 1, bar_top));
 }
 
+// ============================================================
+// RECT DRAW
+// ============================================================
 #if !defined(PBL_ROUND)
 static void draw_rect(GContext *ctx, int w, int h) {
   bool show24 = s_settings.Show24h;
@@ -127,15 +135,15 @@ static void draw_rect(GContext *ctx, int w, int h) {
   int hfill = show24 ? (bar_h * dh / 24) : (slot_h * dh);
   int mfill = (slot_h * s_minute) / 5;
 
-  int h_fill_top = bar_bot - hfill;
-  int m_fill_top = bar_bot - mfill;
+  int h_fill_top = bar_bot - hfill;  // top of hour fill (bar_bot when hfill=0)
+  int m_fill_top = bar_bot - mfill;  // top of minute fill
 
   int h_label_w = hx - NUB_PX - GAP_PX;
   int m_label_x = mx + bw + NUB_PX + GAP_PX;
   int m_label_w = w - m_label_x;
-  int lh = 11;
+  int lh = 12;
 
-  // 1. Tick lines + nubs
+  // ---- 1. Tick lines + nubs (before fills) ----
   graphics_context_set_stroke_width(ctx, 1);
   graphics_context_set_stroke_color(ctx, col_lit);
   for (int i = 1; i < 12; i++) {
@@ -146,11 +154,11 @@ static void draw_rect(GContext *ctx, int w, int h) {
     graphics_draw_line(ctx, GPoint(mx + bw,      ty), GPoint(mx + bw + NUB_PX - 1, ty));
   }
 
-  // 2. Top/bottom border lines
+  // ---- 2. Top/bottom border lines ----
   draw_bar_borders(ctx, hx, bw, bar_top, bar_bot, true,  false, NUB_PX, col_lit);
   draw_bar_borders(ctx, mx, bw, bar_top, bar_bot, false, true,  NUB_PX, col_lit);
 
-  // 3. Bar fills
+  // ---- 3. Bar fills (cover tick lines in filled region) ----
   if (hfill > 0) {
     graphics_context_set_fill_color(ctx, col_lit);
     graphics_fill_rect(ctx, GRect(hx, h_fill_top, bw, hfill), 0, GCornerNone);
@@ -160,7 +168,9 @@ static void draw_rect(GContext *ctx, int w, int h) {
     graphics_fill_rect(ctx, GRect(mx, m_fill_top, bw, mfill), 0, GCornerNone);
   }
 
-  // 4. Separator cuts — strictly inside filled region only
+  // ---- 4. Separator cuts — only strictly inside filled region ----
+  // "strictly inside" = ty > fill_top (fill has gone above the line)
+  // ty == fill_top means the fill just reached the line from below — no cut yet
   graphics_context_set_fill_color(ctx, col_bg);
   for (int i = 1; i < 12; i++) {
     int ty = bar_bot - slot_h * i;
@@ -170,7 +180,7 @@ static void draw_rect(GContext *ctx, int w, int h) {
       graphics_fill_rect(ctx, GRect(mx, ty, bw, 1), 0, GCornerNone);
   }
 
-  // 24h: half-slot cuts on hour bar
+  // 24h: half-slot cuts on hour bar (strictly inside fill)
   if (show24 && hfill > 0) {
     graphics_context_set_fill_color(ctx, col_bg);
     for (int i = 0; i < 12; i++) {
@@ -180,7 +190,7 @@ static void draw_rect(GContext *ctx, int w, int h) {
     }
   }
 
-  // 5. Labels
+  // ---- 5. Labels ----
   graphics_context_set_text_color(ctx, col_txt);
   {
     char buf[4];
@@ -208,7 +218,7 @@ static void draw_rect(GContext *ctx, int w, int h) {
     }
   }
 
-  // 6. Date
+  // ---- 6. Date ----
   graphics_context_set_text_color(ctx, col_txt);
   graphics_draw_text(ctx, s_date_buf, s_font_date,
     GRect(0, date_y, w, h - date_y),
@@ -216,6 +226,9 @@ static void draw_rect(GContext *ctx, int w, int h) {
 }
 #endif
 
+// ============================================================
+// ROUND DRAW
+// ============================================================
 #if defined(PBL_ROUND)
 static void draw_round(GContext *ctx, int w, int h) {
   bool show24 = s_settings.Show24h;
@@ -243,12 +256,13 @@ static void draw_round(GContext *ctx, int w, int h) {
   int hx      = cx - gap / 2 - bw;
   int mx      = cx + gap / 2;
 
-  int dh         = show24 ? s_hour : (s_hour % 12);
-  int hfill      = show24 ? (bar_h * dh / 24) : (slot_h * dh);
-  int mfill      = (slot_h * s_minute) / 5;
+  int dh      = show24 ? s_hour : (s_hour % 12);
+  int hfill   = show24 ? (bar_h * dh / 24) : (slot_h * dh);
+  int mfill   = (slot_h * s_minute) / 5;
   int h_fill_top = bar_bot - hfill;
   int m_fill_top = bar_bot - mfill;
 
+  // Ticks + border lines first
   graphics_context_set_stroke_width(ctx, 1);
   graphics_context_set_stroke_color(ctx, col_lit);
   for (int i = 1; i < 12; i++) {
@@ -260,21 +274,23 @@ static void draw_round(GContext *ctx, int w, int h) {
     graphics_draw_line(ctx, GPoint(cx - chord, ty), GPoint(hx - 1,      ty));
     graphics_draw_line(ctx, GPoint(mx + bw,    ty), GPoint(cx + chord,  ty));
   }
+  // Border lines at top and bottom
   {
-    int dy_bot    = bar_bot - cy;
-    int c_bot     = (dy_bot*dy_bot < r*r) ? prv_isqrt(r*r - dy_bot*dy_bot) : 0;
-    int dy_top    = bar_top - cy;
-    int c_top     = (dy_top*dy_top < r*r) ? prv_isqrt(r*r - dy_top*dy_top) : 0;
+    int dy_bot = bar_bot - cy;
+    int chord_bot = (dy_bot*dy_bot < r*r) ? prv_isqrt(r*r - dy_bot*dy_bot) : 0;
+    int dy_top = bar_top - cy;
+    int chord_top = (dy_top*dy_top < r*r) ? prv_isqrt(r*r - dy_top*dy_top) : 0;
     graphics_draw_line(ctx, GPoint(hx, bar_bot), GPoint(hx + bw - 1, bar_bot));
     graphics_draw_line(ctx, GPoint(mx, bar_bot), GPoint(mx + bw - 1, bar_bot));
-    graphics_draw_line(ctx, GPoint(cx - c_bot, bar_bot), GPoint(hx - 1, bar_bot));
-    graphics_draw_line(ctx, GPoint(mx + bw, bar_bot),    GPoint(cx + c_bot, bar_bot));
+    graphics_draw_line(ctx, GPoint(cx - chord_bot, bar_bot), GPoint(hx - 1, bar_bot));
+    graphics_draw_line(ctx, GPoint(mx + bw, bar_bot), GPoint(cx + chord_bot, bar_bot));
     graphics_draw_line(ctx, GPoint(hx, bar_top), GPoint(hx + bw - 1, bar_top));
     graphics_draw_line(ctx, GPoint(mx, bar_top), GPoint(mx + bw - 1, bar_top));
-    graphics_draw_line(ctx, GPoint(cx - c_top, bar_top), GPoint(hx - 1, bar_top));
-    graphics_draw_line(ctx, GPoint(mx + bw, bar_top),    GPoint(cx + c_top, bar_top));
+    graphics_draw_line(ctx, GPoint(cx - chord_top, bar_top), GPoint(hx - 1, bar_top));
+    graphics_draw_line(ctx, GPoint(mx + bw, bar_top), GPoint(cx + chord_top, bar_top));
   }
 
+  // Fills
   if (hfill > 0) {
     graphics_context_set_fill_color(ctx, col_lit);
     graphics_fill_rect(ctx, GRect(hx, h_fill_top, bw, hfill), 0, GCornerNone);
@@ -284,6 +300,7 @@ static void draw_round(GContext *ctx, int w, int h) {
     graphics_fill_rect(ctx, GRect(mx, m_fill_top, bw, mfill), 0, GCornerNone);
   }
 
+  // Separator cuts strictly inside fill
   graphics_context_set_fill_color(ctx, col_bg);
   for (int i = 1; i < 12; i++) {
     int ty = bar_bot - slot_h * i;
@@ -300,6 +317,9 @@ static void draw_round(GContext *ctx, int w, int h) {
 }
 #endif
 
+// ============================================================
+// MAIN DRAW CALLBACK
+// ============================================================
 static void draw_layer(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
   int w = bounds.size.w, h = bounds.size.h;
@@ -365,8 +385,8 @@ static void window_unload(Window *window) {
 
 static void init(void) {
   prv_load_settings();
-#ifdef RESOURCE_ID_FONT_ARIAL_10
-  s_font_label   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ARIAL_10));
+#ifdef RESOURCE_ID_FONT_ARIAL_11
+  s_font_label   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ARIAL_11));
   s_font_date    = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ARIAL_18));
   s_custom_fonts = true;
 #else
