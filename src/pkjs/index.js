@@ -1,93 +1,56 @@
-// ============================================================
-// Bar Graph 2 — index.js (PebbleKit JS)
-// Handles config page + settings persistence via localStorage.
-// No pebble-clay dependency — config.js generates HTML directly.
-// ============================================================
+var buildUrl = require('./config').buildUrl;
 
-var buildConfigPage = require('./config');
+var STORE = 'bg2_settings';
+var COLOR_KEYS = ['BackgroundColor', 'DateColor', 'HourDigitColor', 'MinuteDigitColor',
+  'HourLineColor', 'MinuteLineColor', 'HourLitColor', 'MinuteLitColor',
+  'HourDimColor', 'MinuteDimColor'];
+var BOOL_KEYS = ['InvertBW', 'ShowTrack', 'Show24h'];
 
-// Hex string (#RRGGBB) → integer for GColorFromHEX on watch
-function hexToInt(hex) {
-  return parseInt(hex.replace('#', ''), 16);
-}
-
-// Defaults mirror prv_default_settings() in main.c
-var DEFAULTS = {
-  BackgroundColor: '#000000',
-  BarLitColor:     '#FFFFFF',
-  BarDimColor:     '#555555',
-  DateTextColor:   '#FFFFFF',
-  RingBattColor:   '#FFFFFF',
-  RingStepsColor:  '#FFFFFF',
-  RingDimColor:    '#555555',
-  StepGoal:        10000,
-  ShowRing:        true,
-  InvertBW:        false,
-  Show24h:         false
-};
-
-function loadSettings() {
-  var settings = {};
-  for (var key in DEFAULTS) {
-    var stored = localStorage.getItem('BG2_' + key);
-    if (stored === null) {
-      settings[key] = DEFAULTS[key];
-    } else if (stored === 'true') {
-      settings[key] = true;
-    } else if (stored === 'false') {
-      settings[key] = false;
-    } else {
-      var num = Number(stored);
-      settings[key] = (!isNaN(num) && stored.indexOf('#') === -1) ? num : stored;
-    }
-  }
-  return settings;
-}
-
-function saveSettings(settings) {
-  for (var key in settings) {
-    localStorage.setItem('BG2_' + key, settings[key]);
-  }
-}
-
-function sendSettings(settings) {
-  var dict = {
-    BackgroundColor: hexToInt(settings.BackgroundColor),
-    BarLitColor:     hexToInt(settings.BarLitColor),
-    BarDimColor:     hexToInt(settings.BarDimColor),
-    DateTextColor:   hexToInt(settings.DateTextColor),
-    RingBattColor:   hexToInt(settings.RingBattColor),
-    RingStepsColor:  hexToInt(settings.RingStepsColor),
-    RingDimColor:    hexToInt(settings.RingDimColor),
-    StepGoal:        parseInt(settings.StepGoal, 10),
-    ShowRing:        settings.ShowRing  ? 1 : 0,
-    InvertBW:        settings.InvertBW  ? 1 : 0,
-    Show24h:         settings.Show24h   ? 1 : 0
-  };
-
-  Pebble.sendAppMessage(dict,
-    function()  { console.log('BG2: settings sent OK'); },
-    function(e) { console.log('BG2: send error: ' + JSON.stringify(e)); }
-  );
-}
-
-Pebble.addEventListener('ready', function() {
-  console.log('BG2: PebbleKit JS ready');
-  sendSettings(loadSettings());
-});
-
-Pebble.addEventListener('showConfiguration', function() {
-  var currentSettings = loadSettings();
-  Pebble.openURL(buildConfigPage(currentSettings));
-});
-
-Pebble.addEventListener('webviewclosed', function(e) {
-  if (!e || !e.response || e.response === 'CANCELLED') return;
+function getPlatform() {
   try {
-    var settings = JSON.parse(decodeURIComponent(e.response));
-    saveSettings(settings);
-    sendSettings(settings);
-  } catch(err) {
-    console.log('BG2: failed to parse settings: ' + err);
+    var p = Pebble.getActiveWatchInfo().platform;
+    return (p === 'aplite' || p === 'diorite' || p === 'flint') ? 'bw' : 'color';
+  } catch (e) {
+    return 'color';
   }
+}
+
+function load() {
+  try { return JSON.parse(localStorage.getItem(STORE) || '{}'); } catch (e) { return {}; }
+}
+
+function toMessage(s) {
+  var m = {}, i;
+  for (i = 0; i < COLOR_KEYS.length; i++) {
+    var c = s[COLOR_KEYS[i]];
+    if (typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)) m[COLOR_KEYS[i]] = parseInt(c.slice(1), 16);
+  }
+  for (i = 0; i < BOOL_KEYS.length; i++) {
+    if (s.hasOwnProperty(BOOL_KEYS[i])) m[BOOL_KEYS[i]] = s[BOOL_KEYS[i]] ? 1 : 0;
+  }
+  return m;
+}
+
+function send(s) {
+  var m = toMessage(s);
+  Pebble.sendAppMessage(m, function () {}, function (e) {
+    console.log('Bar Graph 2: send failed ' + JSON.stringify(e));
+  });
+}
+
+Pebble.addEventListener('ready', function () {
+  var s = load();
+  if (Object.keys(s).length) send(s);
+});
+
+Pebble.addEventListener('showConfiguration', function () {
+  Pebble.openURL(buildUrl(getPlatform(), load()));
+});
+
+Pebble.addEventListener('webviewclosed', function (e) {
+  if (!e || !e.response) return;
+  var s;
+  try { s = JSON.parse(decodeURIComponent(e.response)); } catch (err) { return; }
+  try { localStorage.setItem(STORE, JSON.stringify(s)); } catch (err2) {}
+  send(s);
 });
