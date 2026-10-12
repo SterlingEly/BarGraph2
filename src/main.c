@@ -1,15 +1,14 @@
 #include <pebble.h>
 
 // ============================================================
-// Bar Graph 2 — main.c  v2.22 (aplite/basalt/diorite date nudged up 2px; flint/emery/chalk/gabbro approved)
-// Fixes:
-//   1. Separator cut: only when ty > h_fill_top (fill strictly
-//      above the line, not just at it) — prevents premature flip
-//   2. Top and bottom border lines at bar_top and bar_bot
-//      spanning bar width + nubs on both bars
+// Bar Graph 2 — main.c  v2.23
+// Layout approved on all platforms (v2.22). v2.23 adds the full color model:
+//   background, date, hour/minute digits, hour/minute lines,
+//   hour/minute filled bar, hour/minute unfilled track.
+// Black-and-white watches use Invert + an optional unfilled track.
 // ============================================================
 
-#define SETTINGS_KEY 1
+#define SETTINGS_KEY 2   // v2.23: new color model. Key 1 held the old layout and is abandoned.
 
 #define V1_BAR_BOT  140
 #define V1_BAR_TOP    8
@@ -56,9 +55,9 @@
       #define DATE_FONT_KEY FONT_KEY_GOTHIC_18_BOLD
       #define DATE_Y_ADJ     3
     #else
-      // aplite / basalt / diorite: Gothic 24 Bold, approved size; nudged up 2px from v2.21.
+      // aplite / basalt / diorite: Gothic 24 Bold; nudged up 3px total from v2.21 (2 + 1 more in v2.23).
       #define DATE_FONT_KEY FONT_KEY_GOTHIC_24_BOLD
-      #define DATE_Y_ADJ    -3
+      #define DATE_Y_ADJ    -4
     #endif
   #endif
 #else
@@ -74,42 +73,46 @@
 #define ROUND_PAD_REF      5   // gap between label column and bar
 #define ROUND_SHIFT_Y      2   // nudge the whole block down (px)
 
-
+#if defined(PBL_ROUND)
 static int prv_isqrt(int n) {
   if (n <= 0) return 0;
   int x = n, y = (x + 1) / 2;
   while (y < x) { x = y; y = (x + n / x) / 2; }
   return x;
 }
+#endif
 
+// ------------------------------------------------------------
+// Settings
+// ------------------------------------------------------------
 typedef struct {
-  GColor BackgroundColor;
-  GColor BarLitColor;
-  GColor BarDimColor;
-  GColor DateTextColor;
-  GColor RingBattColor;
-  GColor RingStepsColor;
-  GColor RingDimColor;
-  int    StepGoal;
-  bool   ShowRing;
-  bool   InvertBW;
+  GColor Background;
+  GColor Date;
+  GColor HourDigit,  MinuteDigit;
+  GColor HourLine,   MinuteLine;
+  GColor HourLit,    MinuteLit;     // filled part of each bar
+  GColor HourDim,    MinuteDim;     // unfilled track (same as Background = no track)
+  bool   InvertBW;                  // B&W watches only
+  bool   ShowTrack;                 // B&W watches only: draw the unfilled track in gray
   bool   Show24h;
 } BarSettings;
 
 static BarSettings s_settings;
 
 static void prv_default_settings(void) {
-  s_settings.BackgroundColor = GColorBlack;
-  s_settings.BarLitColor     = GColorWhite;
-  s_settings.BarDimColor     = GColorDarkGray;
-  s_settings.DateTextColor   = GColorWhite;
-  s_settings.RingBattColor   = GColorWhite;
-  s_settings.RingStepsColor  = GColorWhite;
-  s_settings.RingDimColor    = GColorDarkGray;
-  s_settings.StepGoal        = 10000;
-  s_settings.ShowRing        = false;
-  s_settings.InvertBW        = false;
-  s_settings.Show24h         = false;
+  s_settings.Background  = GColorBlack;
+  s_settings.Date        = GColorWhite;
+  s_settings.HourDigit   = GColorWhite;
+  s_settings.MinuteDigit = GColorWhite;
+  s_settings.HourLine    = GColorWhite;
+  s_settings.MinuteLine  = GColorWhite;
+  s_settings.HourLit     = GColorWhite;
+  s_settings.MinuteLit   = GColorWhite;
+  s_settings.HourDim     = GColorBlack;   // classic look: no visible track
+  s_settings.MinuteDim   = GColorBlack;
+  s_settings.InvertBW    = false;
+  s_settings.ShowTrack   = false;
+  s_settings.Show24h     = false;
 }
 
 static void prv_save_settings(void) {
@@ -119,6 +122,31 @@ static void prv_save_settings(void) {
 static void prv_load_settings(void) {
   prv_default_settings();
   persist_read_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
+}
+
+// Resolved colors for drawing. B&W watches ignore the color settings.
+typedef struct {
+  GColor bg, date, hdig, mdig, hline, mline, hlit, mlit, hdim, mdim;
+} Pal;
+
+static Pal prv_pal(void) {
+  Pal p;
+#if defined(PBL_BW)
+  GColor bg  = s_settings.InvertBW ? GColorWhite : GColorBlack;
+  GColor fg  = s_settings.InvertBW ? GColorBlack : GColorWhite;
+  GColor dim = s_settings.ShowTrack ? (s_settings.InvertBW ? GColorLightGray : GColorDarkGray) : bg;
+  p.bg = bg;
+  p.date = p.hdig = p.mdig = p.hline = p.mline = p.hlit = p.mlit = fg;
+  p.hdim = p.mdim = dim;
+#else
+  p.bg    = s_settings.Background;
+  p.date  = s_settings.Date;
+  p.hdig  = s_settings.HourDigit;   p.mdig  = s_settings.MinuteDigit;
+  p.hline = s_settings.HourLine;    p.mline = s_settings.MinuteLine;
+  p.hlit  = s_settings.HourLit;     p.mlit  = s_settings.MinuteLit;
+  p.hdim  = s_settings.HourDim;     p.mdim  = s_settings.MinuteDim;
+#endif
+  return p;
 }
 
 static Window  *s_window;
@@ -154,16 +182,7 @@ static void draw_bar_borders(GContext *ctx,
 #if !defined(PBL_ROUND)
 static void draw_rect(GContext *ctx, int w, int h) {
   bool show24 = s_settings.Show24h;
-
-#if defined(PBL_BW)
-  GColor col_bg  = s_settings.InvertBW ? GColorWhite : GColorBlack;
-  GColor col_lit = s_settings.InvertBW ? GColorBlack : GColorWhite;
-  GColor col_txt = col_lit;
-#else
-  GColor col_bg  = s_settings.BackgroundColor;
-  GColor col_lit = s_settings.BarLitColor;
-  GColor col_txt = s_settings.DateTextColor;
-#endif
+  Pal pal = prv_pal();
 
   int hx      = (V1_HX      * w) / 144;
   int bw      = (V1_BAR_W   * w) / 144;
@@ -198,35 +217,46 @@ static void draw_rect(GContext *ctx, int w, int h) {
   int m_label_w = w - m_label_x;
   int lh = LABEL_LH;
 
+  // ---- 0. Unfilled track (only when it differs from the background) ----
+  if (!gcolor_equal(pal.hdim, pal.bg)) {
+    graphics_context_set_fill_color(ctx, pal.hdim);
+    graphics_fill_rect(ctx, GRect(hx, bar_top, bw, bar_h), 0, GCornerNone);
+  }
+  if (!gcolor_equal(pal.mdim, pal.bg)) {
+    graphics_context_set_fill_color(ctx, pal.mdim);
+    graphics_fill_rect(ctx, GRect(mx, bar_top, bw, bar_h), 0, GCornerNone);
+  }
+
   // ---- 1. Tick lines + nubs (before fills) ----
   graphics_context_set_stroke_width(ctx, 1);
-  graphics_context_set_stroke_color(ctx, col_lit);
   for (int i = 1; i < 12; i++) {
     int ty = bar_bot - slot_h * i;
+    graphics_context_set_stroke_color(ctx, pal.hline);
     graphics_draw_line(ctx, GPoint(hx,           ty), GPoint(hx + bw - 1,           ty));
+    graphics_draw_line(ctx, GPoint(hx - NUB_PX,  ty), GPoint(hx - 1,                ty));
+    graphics_context_set_stroke_color(ctx, pal.mline);
     graphics_draw_line(ctx, GPoint(mx,           ty), GPoint(mx + bw - 1,           ty));
-    graphics_draw_line(ctx, GPoint(hx - NUB_PX, ty), GPoint(hx - 1,                ty));
     graphics_draw_line(ctx, GPoint(mx + bw,      ty), GPoint(mx + bw + NUB_PX - 1, ty));
   }
 
   // ---- 2. Top/bottom border lines ----
-  draw_bar_borders(ctx, hx, bw, bar_top, bar_bot, true,  false, NUB_PX, col_lit);
-  draw_bar_borders(ctx, mx, bw, bar_top, bar_bot, false, true,  NUB_PX, col_lit);
+  draw_bar_borders(ctx, hx, bw, bar_top, bar_bot, true,  false, NUB_PX, pal.hline);
+  draw_bar_borders(ctx, mx, bw, bar_top, bar_bot, false, true,  NUB_PX, pal.mline);
 
   // ---- 3. Bar fills (cover tick lines in filled region) ----
   if (hfill > 0) {
-    graphics_context_set_fill_color(ctx, col_lit);
+    graphics_context_set_fill_color(ctx, pal.hlit);
     graphics_fill_rect(ctx, GRect(hx, h_fill_top, bw, hfill), 0, GCornerNone);
   }
   if (mfill > 0) {
-    graphics_context_set_fill_color(ctx, col_lit);
+    graphics_context_set_fill_color(ctx, pal.mlit);
     graphics_fill_rect(ctx, GRect(mx, m_fill_top, bw, mfill), 0, GCornerNone);
   }
 
   // ---- 4. Separator cuts — only strictly inside filled region ----
   // "strictly inside" = ty > fill_top (fill has gone above the line)
   // ty == fill_top means the fill just reached the line from below — no cut yet
-  graphics_context_set_fill_color(ctx, col_bg);
+  graphics_context_set_fill_color(ctx, pal.bg);
   for (int i = 1; i < 12; i++) {
     int ty = bar_bot - slot_h * i;
     if (hfill > 0 && ty > h_fill_top && ty < bar_bot)
@@ -237,7 +267,7 @@ static void draw_rect(GContext *ctx, int w, int h) {
 
   // 24h: half-slot cuts on hour bar (strictly inside fill)
   if (show24 && hfill > 0) {
-    graphics_context_set_fill_color(ctx, col_bg);
+    graphics_context_set_fill_color(ctx, pal.bg);
     for (int i = 0; i < 12; i++) {
       int ty = bar_bot - slot_h * i - slot_h / 2;
       if (ty > bar_top && ty < bar_bot && ty > h_fill_top)
@@ -246,7 +276,7 @@ static void draw_rect(GContext *ctx, int w, int h) {
   }
 
   // ---- 5. Labels ----
-  graphics_context_set_text_color(ctx, col_txt);
+  graphics_context_set_text_color(ctx, pal.hdig);
   {
     char buf[4];
     int step = show24 ? 2 : 1;
@@ -260,6 +290,7 @@ static void draw_rect(GContext *ctx, int w, int h) {
         GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
     }
   }
+  graphics_context_set_text_color(ctx, pal.mdig);
   {
     char buf[4];
     for (int i = 0; i <= 12; i++) {
@@ -274,7 +305,7 @@ static void draw_rect(GContext *ctx, int w, int h) {
   }
 
   // ---- 6. Date ----
-  graphics_context_set_text_color(ctx, col_txt);
+  graphics_context_set_text_color(ctx, pal.date);
   graphics_draw_text(ctx, s_date_buf, s_font_date,
     GRect(0, date_y, w, 40),   // taller than the remaining screen on purpose: Gothic 24 needs ~28px line height
     GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
@@ -286,24 +317,25 @@ static void draw_rect(GContext *ctx, int w, int h) {
 // ============================================================
 #if defined(PBL_ROUND)
 // One graduation line: bar spans + outer tick out to the circle edge (inset 2px from the rim).
-static void prv_round_line(GContext *ctx, int ty, int cx, int cy, int r, int hx, int mx, int bw) {
+// The hour half (left) and minute half (right) take their own line colors.
+static void prv_round_line(GContext *ctx, int ty, int cx, int cy, int r, int hx, int mx, int bw,
+                           GColor hcol, GColor mcol) {
   int dy = ty - cy;
   int chord = (dy*dy < r*r) ? prv_isqrt(r*r - dy*dy) : 0;
   int lx = cx - chord + 2;
   int rx = cx + chord - 2;
+  graphics_context_set_stroke_color(ctx, hcol);
   graphics_draw_line(ctx, GPoint(hx, ty), GPoint(hx + bw - 1, ty));
-  graphics_draw_line(ctx, GPoint(mx, ty), GPoint(mx + bw - 1, ty));
   if (lx < hx - 1)       graphics_draw_line(ctx, GPoint(lx, ty), GPoint(hx - 1, ty));
+  graphics_context_set_stroke_color(ctx, mcol);
+  graphics_draw_line(ctx, GPoint(mx, ty), GPoint(mx + bw - 1, ty));
   if (rx > mx + bw)      graphics_draw_line(ctx, GPoint(mx + bw, ty), GPoint(rx, ty));
 }
 
 static void draw_round(GContext *ctx, int w, int h) {
   bool show24 = s_settings.Show24h;
   int cx = w / 2, cy = h / 2, r = w / 2;
-
-  GColor col_bg  = s_settings.BackgroundColor;
-  GColor col_lit = s_settings.BarLitColor;
-  GColor col_txt = s_settings.DateTextColor;
+  Pal pal = prv_pal();
 
   int lh = LABEL_LH;
   // Width of a two-digit label in the chosen font, measured at runtime
@@ -334,25 +366,34 @@ static void draw_round(GContext *ctx, int w, int h) {
   int h_fill_top = bar_bot - hfill;
   int m_fill_top = bar_bot - mfill;
 
+  // 0. Unfilled track
+  if (!gcolor_equal(pal.hdim, pal.bg)) {
+    graphics_context_set_fill_color(ctx, pal.hdim);
+    graphics_fill_rect(ctx, GRect(hx, bar_top, bw, bar_h), 0, GCornerNone);
+  }
+  if (!gcolor_equal(pal.mdim, pal.bg)) {
+    graphics_context_set_fill_color(ctx, pal.mdim);
+    graphics_fill_rect(ctx, GRect(mx, bar_top, bw, bar_h), 0, GCornerNone);
+  }
+
   // 1. Graduation lines (12 slots + both borders), before fills
   graphics_context_set_stroke_width(ctx, 1);
-  graphics_context_set_stroke_color(ctx, col_lit);
   for (int i = 0; i <= 12; i++) {
-    prv_round_line(ctx, bar_bot - slot_h * i, cx, cy, r, hx, mx, bw);
+    prv_round_line(ctx, bar_bot - slot_h * i, cx, cy, r, hx, mx, bw, pal.hline, pal.mline);
   }
 
   // 2. Fills
   if (hfill > 0) {
-    graphics_context_set_fill_color(ctx, col_lit);
+    graphics_context_set_fill_color(ctx, pal.hlit);
     graphics_fill_rect(ctx, GRect(hx, h_fill_top, bw, hfill), 0, GCornerNone);
   }
   if (mfill > 0) {
-    graphics_context_set_fill_color(ctx, col_lit);
+    graphics_context_set_fill_color(ctx, pal.mlit);
     graphics_fill_rect(ctx, GRect(mx, m_fill_top, bw, mfill), 0, GCornerNone);
   }
 
   // 3. Separator cuts strictly inside fill
-  graphics_context_set_fill_color(ctx, col_bg);
+  graphics_context_set_fill_color(ctx, pal.bg);
   for (int i = 1; i < 12; i++) {
     int ty = bar_bot - slot_h * i;
     if (hfill > 0 && ty > h_fill_top && ty < bar_bot)
@@ -369,10 +410,10 @@ static void draw_round(GContext *ctx, int w, int h) {
   }
 
   // 4. Center-column labels: hour right-aligned on the left of center, minute left-aligned on the right
-  graphics_context_set_text_color(ctx, col_txt);
   {
     char buf[4];
     int step = show24 ? 2 : 1;
+    graphics_context_set_text_color(ctx, pal.hdig);
     for (int i = 0; i <= max_h; i += step) {
       int ty = bar_bot - (show24 ? (bar_h * i / 24) : (slot_h * i));
       int ly = ty - lh / 2 - LABEL_DY;
@@ -381,6 +422,7 @@ static void draw_round(GContext *ctx, int w, int h) {
         GRect(cx - c - lab_w - 4, ly, lab_w + 4, lh),
         GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
     }
+    graphics_context_set_text_color(ctx, pal.mdig);
     for (int i = 0; i <= 12; i++) {
       int ty = bar_bot - slot_h * i;
       int ly = ty - lh / 2 - LABEL_DY;
@@ -392,6 +434,7 @@ static void draw_round(GContext *ctx, int w, int h) {
   }
 
   // 5. Date
+  graphics_context_set_text_color(ctx, pal.date);
   graphics_draw_text(ctx, s_date_buf, s_font_date,
     GRect(0, date_y, w, ROUND_DATE_BOX),
     GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
@@ -404,12 +447,8 @@ static void draw_round(GContext *ctx, int w, int h) {
 static void draw_layer(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
   int w = bounds.size.w, h = bounds.size.h;
-#if defined(PBL_BW)
-  GColor col_bg = s_settings.InvertBW ? GColorWhite : GColorBlack;
-#else
-  GColor col_bg = s_settings.BackgroundColor;
-#endif
-  graphics_context_set_fill_color(ctx, col_bg);
+  Pal pal = prv_pal();
+  graphics_context_set_fill_color(ctx, pal.bg);
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
 #if defined(PBL_ROUND)
   draw_round(ctx, w, h);
@@ -428,30 +467,31 @@ static void tick_handler(struct tm *t, TimeUnits u) {
   layer_mark_dirty(s_canvas_layer);
 }
 
+// Colors arrive as 0xRRGGBB integers from the phone.
+static void prv_read_color(DictionaryIterator *iter, uint32_t key, GColor *out) {
+  Tuple *t = dict_find(iter, key);
+  if (t) *out = GColorFromHEX(t->value->int32);
+}
+
+static void prv_read_bool(DictionaryIterator *iter, uint32_t key, bool *out) {
+  Tuple *t = dict_find(iter, key);
+  if (t) *out = (t->value->int32 == 1);
+}
+
 static void inbox_received(DictionaryIterator *iter, void *context) {
-  Tuple *t;
-  t = dict_find(iter, MESSAGE_KEY_BackgroundColor);
-  if (t) s_settings.BackgroundColor = GColorFromHEX(t->value->int32);
-  t = dict_find(iter, MESSAGE_KEY_BarLitColor);
-  if (t) s_settings.BarLitColor     = GColorFromHEX(t->value->int32);
-  t = dict_find(iter, MESSAGE_KEY_BarDimColor);
-  if (t) s_settings.BarDimColor     = GColorFromHEX(t->value->int32);
-  t = dict_find(iter, MESSAGE_KEY_DateTextColor);
-  if (t) s_settings.DateTextColor   = GColorFromHEX(t->value->int32);
-  t = dict_find(iter, MESSAGE_KEY_RingBattColor);
-  if (t) s_settings.RingBattColor   = GColorFromHEX(t->value->int32);
-  t = dict_find(iter, MESSAGE_KEY_RingStepsColor);
-  if (t) s_settings.RingStepsColor  = GColorFromHEX(t->value->int32);
-  t = dict_find(iter, MESSAGE_KEY_RingDimColor);
-  if (t) s_settings.RingDimColor    = GColorFromHEX(t->value->int32);
-  t = dict_find(iter, MESSAGE_KEY_StepGoal);
-  if (t) s_settings.StepGoal        = (int)t->value->int32;
-  t = dict_find(iter, MESSAGE_KEY_ShowRing);
-  if (t) s_settings.ShowRing        = (t->value->int32 == 1);
-  t = dict_find(iter, MESSAGE_KEY_InvertBW);
-  if (t) s_settings.InvertBW        = (t->value->int32 == 1);
-  t = dict_find(iter, MESSAGE_KEY_Show24h);
-  if (t) s_settings.Show24h         = (t->value->int32 == 1);
+  prv_read_color(iter, MESSAGE_KEY_BackgroundColor,  &s_settings.Background);
+  prv_read_color(iter, MESSAGE_KEY_DateColor,        &s_settings.Date);
+  prv_read_color(iter, MESSAGE_KEY_HourDigitColor,   &s_settings.HourDigit);
+  prv_read_color(iter, MESSAGE_KEY_MinuteDigitColor, &s_settings.MinuteDigit);
+  prv_read_color(iter, MESSAGE_KEY_HourLineColor,    &s_settings.HourLine);
+  prv_read_color(iter, MESSAGE_KEY_MinuteLineColor,  &s_settings.MinuteLine);
+  prv_read_color(iter, MESSAGE_KEY_HourLitColor,     &s_settings.HourLit);
+  prv_read_color(iter, MESSAGE_KEY_MinuteLitColor,   &s_settings.MinuteLit);
+  prv_read_color(iter, MESSAGE_KEY_HourDimColor,     &s_settings.HourDim);
+  prv_read_color(iter, MESSAGE_KEY_MinuteDimColor,   &s_settings.MinuteDim);
+  prv_read_bool(iter,  MESSAGE_KEY_InvertBW,         &s_settings.InvertBW);
+  prv_read_bool(iter,  MESSAGE_KEY_ShowTrack,        &s_settings.ShowTrack);
+  prv_read_bool(iter,  MESSAGE_KEY_Show24h,          &s_settings.Show24h);
   prv_save_settings();
   layer_mark_dirty(s_canvas_layer);
 }
