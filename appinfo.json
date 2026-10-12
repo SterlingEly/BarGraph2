@@ -15,15 +15,17 @@
   ],
   "appKeys": {
     "BackgroundColor": 0,
-    "BarLitColor": 1,
-    "BarDimColor": 2,
-    "DateTextColor": 3,
-    "RingBattColor": 4,
-    "RingStepsColor": 5,
-    "RingDimColor": 6,
-    "StepGoal": 7,
-    "ShowRing": 8,
-    "InvertBW": 9,
-    "Show24h": 10
+    "DateColor": 1,
+    "HourDigitColor": 2,
+    "MinuteDigitColor": 3,
+    "HourLineColor": 4,
+    "MinuteLineColor": 5,
+    "HourLitColor": 6,
+    "MinuteLitColor": 7,
+    "HourDimColor": 8,
+    "MinuteDimColor": 9,
+    "InvertBW": 10,
+    "ShowTrack": 11,
+    "Show24h": 12
   }
 }
