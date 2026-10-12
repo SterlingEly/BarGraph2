@@ -1,7 +1,7 @@
 #include <pebble.h>
 
 // ============================================================
-// Bar Graph 2 — main.c  v2.20 (round: center-column labels; gabbro fonts = emery fonts)
+// Bar Graph 2 — main.c  v2.21 (flint/emery locked; aplite/basalt/diorite date Gothic 24 Bold; round: wider bars + more label space)
 // Fixes:
 //   1. Separator cut: only when ty > h_fill_top (fill strictly
 //      above the line, not just at it) — prevents premature flip
@@ -26,12 +26,12 @@
 
 // Fonts: 1 = built-in Pebble fonts (no resources needed), 0 = custom Arial (FONT_ARIAL_11/18)
 // NOTE: Leco only has real letters on newer firmware (flint, emery, gabbro). On aplite,
-// basalt, chalk and diorite it renders letters as junk boxes, so those use Gothic 18 Bold.
+// basalt, chalk and diorite it renders letters as junk boxes, so those use Gothic (24 Bold on 144x168, 18 Bold on chalk).
 // DATE_Y_ADJ shifts the date box so different fonts land the glyphs in the same place.
 #define USE_SYSTEM_FONTS 1
 #if USE_SYSTEM_FONTS
   #if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_GABBRO)
-    // Large screens (emery 200x228, gabbro 260x260): one size up from the small platforms.
+    // Large screens (emery 200x228 LOCKED, gabbro 260x260): one size up from the small platforms.
     #define LABEL_FONT_KEY  FONT_KEY_GOTHIC_18_BOLD
     #define DATE_FONT_KEY   FONT_KEY_LECO_26_BOLD_NUMBERS_AM_PM
     #define DATE_Y_ADJ       0
@@ -48,12 +48,17 @@
     #define LABEL_DY         1   // measured in simulator: digit centers land exactly on tick lines
     #define ROUND_DATE_BOX  25   // vertical extent of the date below the bars (chalk)
     #if defined(PBL_PLATFORM_FLINT)
+      // flint: LOCKED
       #define DATE_FONT_KEY FONT_KEY_LECO_20_BOLD_NUMBERS
       #define DATE_Y_ADJ     0
-    #else
-      // aplite / basalt / chalk / diorite. ESTIMATE: Gothic glyphs sit ~3px higher in the box than Leco's.
+    #elif defined(PBL_ROUND)
+      // chalk. ESTIMATE: Gothic glyphs sit ~3px higher in the box than Leco's.
       #define DATE_FONT_KEY FONT_KEY_GOTHIC_18_BOLD
       #define DATE_Y_ADJ     3
+    #else
+      // aplite / basalt / diorite: one size up (Gothic 24 Bold). ESTIMATE: box offset, 1px higher than before.
+      #define DATE_FONT_KEY FONT_KEY_GOTHIC_24_BOLD
+      #define DATE_Y_ADJ    -1
     #endif
   #endif
 #else
@@ -64,9 +69,9 @@
 #endif
 
 // Round layout: all sizes below are for a 180px-wide screen and scale with width.
-#define ROUND_BAR_W_REF   24   // bar width
+#define ROUND_BAR_W_REF   28   // bar width
 #define ROUND_C_REF        3   // half-gap between hour and minute label columns
-#define ROUND_PAD_REF      3   // gap between label column and bar
+#define ROUND_PAD_REF      5   // gap between label column and bar
 #define ROUND_SHIFT_Y      2   // nudge the whole block down (px)
 
 
@@ -271,7 +276,7 @@ static void draw_rect(GContext *ctx, int w, int h) {
   // ---- 6. Date ----
   graphics_context_set_text_color(ctx, col_txt);
   graphics_draw_text(ctx, s_date_buf, s_font_date,
-    GRect(0, date_y, w, h - date_y),
+    GRect(0, date_y, w, 40),   // taller than the remaining screen on purpose: Gothic 24 needs ~28px line height
     GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
 }
 #endif
