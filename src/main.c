@@ -1,7 +1,7 @@
 #include <pebble.h>
 
 // ============================================================
-// Bar Graph 2 — main.c  v2.19 (Leco date only on flint/emery/gabbro; Gothic 18 Bold date elsewhere)
+// Bar Graph 2 — main.c  v2.20 (round: center-column labels; gabbro fonts = emery fonts)
 // Fixes:
 //   1. Separator cut: only when ty > h_fill_top (fill strictly
 //      above the line, not just at it) — prevents premature flip
@@ -30,22 +30,24 @@
 // DATE_Y_ADJ shifts the date box so different fonts land the glyphs in the same place.
 #define USE_SYSTEM_FONTS 1
 #if USE_SYSTEM_FONTS
-  #if defined(PBL_PLATFORM_EMERY)
-    // Emery (200x228): one size up from the small platforms.
+  #if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_GABBRO)
+    // Large screens (emery 200x228, gabbro 260x260): one size up from the small platforms.
     #define LABEL_FONT_KEY  FONT_KEY_GOTHIC_18_BOLD
     #define DATE_FONT_KEY   FONT_KEY_LECO_26_BOLD_NUMBERS_AM_PM
     #define DATE_Y_ADJ       0
     #define LABEL_LH        22
     #define LABEL_DY         1
+    #define ROUND_DATE_BOX  34   // vertical extent of the date below the bars (gabbro)
     #define EMERY_BAR_BOT  192
     #define EMERY_SLOT_H    15
     #define EMERY_DATE_Y   196
   #else
-    // 144x168 and round platforms
+    // 144x168 (aplite, basalt, diorite, flint) and chalk (180x180)
     #define LABEL_FONT_KEY  FONT_KEY_GOTHIC_14_BOLD   // or FONT_KEY_GOTHIC_14
     #define LABEL_LH        16
     #define LABEL_DY         1   // measured in simulator: digit centers land exactly on tick lines
-    #if defined(PBL_PLATFORM_FLINT) || defined(PBL_PLATFORM_GABBRO)
+    #define ROUND_DATE_BOX  25   // vertical extent of the date below the bars (chalk)
+    #if defined(PBL_PLATFORM_FLINT)
       #define DATE_FONT_KEY FONT_KEY_LECO_20_BOLD_NUMBERS
       #define DATE_Y_ADJ     0
     #else
@@ -58,13 +60,15 @@
   #define LABEL_LH          16
   #define LABEL_DY           1   // Arial 11 in a 16px box (was 3 in a 12px box)
   #define DATE_Y_ADJ         0
+  #define ROUND_DATE_BOX    25
 #endif
 
-#define ROUND_BAR_W    22
-#define ROUND_BAR_GAP  10
-#define ROUND_DATE_H   20
-#define ROUND_DATE_GAP  4
-#define ROUND_MARGIN   26
+// Round layout: all sizes below are for a 180px-wide screen and scale with width.
+#define ROUND_BAR_W_REF   24   // bar width
+#define ROUND_C_REF        3   // half-gap between hour and minute label columns
+#define ROUND_PAD_REF      3   // gap between label column and bar
+#define ROUND_SHIFT_Y      2   // nudge the whole block down (px)
+
 
 static int prv_isqrt(int n) {
   if (n <= 0) return 0;
@@ -273,70 +277,66 @@ static void draw_rect(GContext *ctx, int w, int h) {
 #endif
 
 // ============================================================
-// ROUND DRAW
+// ROUND DRAW — labels live in a center column between the bars
 // ============================================================
 #if defined(PBL_ROUND)
+// One graduation line: bar spans + outer tick out to the circle edge (inset 2px from the rim).
+static void prv_round_line(GContext *ctx, int ty, int cx, int cy, int r, int hx, int mx, int bw) {
+  int dy = ty - cy;
+  int chord = (dy*dy < r*r) ? prv_isqrt(r*r - dy*dy) : 0;
+  int lx = cx - chord + 2;
+  int rx = cx + chord - 2;
+  graphics_draw_line(ctx, GPoint(hx, ty), GPoint(hx + bw - 1, ty));
+  graphics_draw_line(ctx, GPoint(mx, ty), GPoint(mx + bw - 1, ty));
+  if (lx < hx - 1)       graphics_draw_line(ctx, GPoint(lx, ty), GPoint(hx - 1, ty));
+  if (rx > mx + bw)      graphics_draw_line(ctx, GPoint(mx + bw, ty), GPoint(rx, ty));
+}
+
 static void draw_round(GContext *ctx, int w, int h) {
   bool show24 = s_settings.Show24h;
-  int cx = w / 2, cy = h / 2, r = cx;
+  int cx = w / 2, cy = h / 2, r = w / 2;
 
-#if defined(PBL_BW)
-  GColor col_bg  = GColorBlack;
-  GColor col_lit = GColorWhite;
-  GColor col_txt = GColorWhite;
-#else
   GColor col_bg  = s_settings.BackgroundColor;
   GColor col_lit = s_settings.BarLitColor;
   GColor col_txt = s_settings.DateTextColor;
-#endif
 
-  int bw      = ROUND_BAR_W;
-  int gap     = ROUND_BAR_GAP;
-  int date_h  = ROUND_DATE_H;
-  int dgap    = ROUND_DATE_GAP;
-  int slot_h  = (h - ROUND_MARGIN * 2 - date_h - dgap) / 12;
+  int lh = LABEL_LH;
+  // Width of a two-digit label in the chosen font, measured at runtime
+  GSize lsz = graphics_text_layout_get_content_size("00", s_font_label,
+                GRect(0, 0, 100, 40), GTextOverflowModeWordWrap, GTextAlignmentLeft);
+  int lab_w = lsz.w;
+
+  int bw  = (ROUND_BAR_W_REF * w) / 180;
+  int c   = (ROUND_C_REF     * w) / 180;
+  int pad = (ROUND_PAD_REF   * w) / 180;
+  if (c < 2) c = 2;
+  int hx  = cx - c - lab_w - pad - bw;
+  int mx  = cx + c + lab_w + pad;
+
+  int slot_h = ((h * 2) / 3) / 12;
   if (slot_h < 2) slot_h = 2;
-  int bar_h   = slot_h * 12;
-  int bar_top = (h - bar_h - date_h - dgap) / 2;
+  int bar_h  = slot_h * 12;
+  int dgap   = (4 * h) / 180;
+  int total  = bar_h + dgap + ROUND_DATE_BOX;
+  int bar_top = (h - total) / 2 + ROUND_SHIFT_Y;
   int bar_bot = bar_top + bar_h;
-  int hx      = cx - gap / 2 - bw;
-  int mx      = cx + gap / 2;
+  int date_y  = bar_bot + dgap + DATE_Y_ADJ;
 
-  int dh      = show24 ? s_hour : (s_hour % 12);
-  int hfill   = show24 ? (bar_h * dh / 24) : (slot_h * dh);
-  int mfill   = (slot_h * s_minute) / 5;
+  int max_h  = show24 ? 24 : 12;
+  int dh     = show24 ? s_hour : (s_hour % 12);
+  int hfill  = show24 ? (bar_h * dh / 24) : (slot_h * dh);
+  int mfill  = (slot_h * s_minute) / 5;
   int h_fill_top = bar_bot - hfill;
   int m_fill_top = bar_bot - mfill;
 
-  // Ticks + border lines first
+  // 1. Graduation lines (12 slots + both borders), before fills
   graphics_context_set_stroke_width(ctx, 1);
   graphics_context_set_stroke_color(ctx, col_lit);
-  for (int i = 1; i < 12; i++) {
-    int ty = bar_bot - slot_h * i;
-    int dy = ty - cy;
-    int chord = (dy*dy < r*r) ? prv_isqrt(r*r - dy*dy) : 0;
-    graphics_draw_line(ctx, GPoint(hx,         ty), GPoint(hx + bw - 1, ty));
-    graphics_draw_line(ctx, GPoint(mx,         ty), GPoint(mx + bw - 1, ty));
-    graphics_draw_line(ctx, GPoint(cx - chord, ty), GPoint(hx - 1,      ty));
-    graphics_draw_line(ctx, GPoint(mx + bw,    ty), GPoint(cx + chord,  ty));
-  }
-  // Border lines at top and bottom
-  {
-    int dy_bot = bar_bot - cy;
-    int chord_bot = (dy_bot*dy_bot < r*r) ? prv_isqrt(r*r - dy_bot*dy_bot) : 0;
-    int dy_top = bar_top - cy;
-    int chord_top = (dy_top*dy_top < r*r) ? prv_isqrt(r*r - dy_top*dy_top) : 0;
-    graphics_draw_line(ctx, GPoint(hx, bar_bot), GPoint(hx + bw - 1, bar_bot));
-    graphics_draw_line(ctx, GPoint(mx, bar_bot), GPoint(mx + bw - 1, bar_bot));
-    graphics_draw_line(ctx, GPoint(cx - chord_bot, bar_bot), GPoint(hx - 1, bar_bot));
-    graphics_draw_line(ctx, GPoint(mx + bw, bar_bot), GPoint(cx + chord_bot, bar_bot));
-    graphics_draw_line(ctx, GPoint(hx, bar_top), GPoint(hx + bw - 1, bar_top));
-    graphics_draw_line(ctx, GPoint(mx, bar_top), GPoint(mx + bw - 1, bar_top));
-    graphics_draw_line(ctx, GPoint(cx - chord_top, bar_top), GPoint(hx - 1, bar_top));
-    graphics_draw_line(ctx, GPoint(mx + bw, bar_top), GPoint(cx + chord_top, bar_top));
+  for (int i = 0; i <= 12; i++) {
+    prv_round_line(ctx, bar_bot - slot_h * i, cx, cy, r, hx, mx, bw);
   }
 
-  // Fills
+  // 2. Fills
   if (hfill > 0) {
     graphics_context_set_fill_color(ctx, col_lit);
     graphics_fill_rect(ctx, GRect(hx, h_fill_top, bw, hfill), 0, GCornerNone);
@@ -346,7 +346,7 @@ static void draw_round(GContext *ctx, int w, int h) {
     graphics_fill_rect(ctx, GRect(mx, m_fill_top, bw, mfill), 0, GCornerNone);
   }
 
-  // Separator cuts strictly inside fill
+  // 3. Separator cuts strictly inside fill
   graphics_context_set_fill_color(ctx, col_bg);
   for (int i = 1; i < 12; i++) {
     int ty = bar_bot - slot_h * i;
@@ -355,10 +355,40 @@ static void draw_round(GContext *ctx, int w, int h) {
     if (mfill > 0 && ty > m_fill_top && ty < bar_bot)
       graphics_fill_rect(ctx, GRect(mx, ty, bw, 1), 0, GCornerNone);
   }
+  if (show24 && hfill > 0) {
+    for (int i = 0; i < 12; i++) {
+      int ty = bar_bot - slot_h * i - slot_h / 2;
+      if (ty > bar_top && ty < bar_bot && ty > h_fill_top)
+        graphics_fill_rect(ctx, GRect(hx, ty, bw, 1), 0, GCornerNone);
+    }
+  }
 
+  // 4. Center-column labels: hour right-aligned on the left of center, minute left-aligned on the right
   graphics_context_set_text_color(ctx, col_txt);
+  {
+    char buf[4];
+    int step = show24 ? 2 : 1;
+    for (int i = 0; i <= max_h; i += step) {
+      int ty = bar_bot - (show24 ? (bar_h * i / 24) : (slot_h * i));
+      int ly = ty - lh / 2 - LABEL_DY;
+      snprintf(buf, sizeof(buf), "%02d", i);
+      graphics_draw_text(ctx, buf, s_font_label,
+        GRect(cx - c - lab_w - 4, ly, lab_w + 4, lh),
+        GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
+    }
+    for (int i = 0; i <= 12; i++) {
+      int ty = bar_bot - slot_h * i;
+      int ly = ty - lh / 2 - LABEL_DY;
+      snprintf(buf, sizeof(buf), "%02d", i * 5);
+      graphics_draw_text(ctx, buf, s_font_label,
+        GRect(cx + c, ly, lab_w + 4, lh),
+        GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
+    }
+  }
+
+  // 5. Date
   graphics_draw_text(ctx, s_date_buf, s_font_date,
-    GRect(0, bar_bot + dgap, w, date_h),
+    GRect(0, date_y, w, ROUND_DATE_BOX),
     GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
 }
 #endif
