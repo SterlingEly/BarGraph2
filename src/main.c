@@ -1,7 +1,7 @@
 #include <pebble.h>
 
 // ============================================================
-// Bar Graph 2 — main.c  v2.17 (slot 11px, bar top y=8; Gothic 14 Bold digits, Leco 20 date, date y=144)
+// Bar Graph 2 — main.c  v2.18 (aplite margins tweak; emery: Gothic 18 Bold digits, Leco 26 date; fixed test date)
 // Fixes:
 //   1. Separator cut: only when ty > h_fill_top (fill strictly
 //      above the line, not just at it) — prevents premature flip
@@ -16,19 +16,36 @@
 #define V1_HX        38
 #define V1_BAR_W     30
 #define V1_MX        76
-#define V1_DATE_Y   144
+#define V1_DATE_Y   143   // aplite: margins top 4 / bar-to-date 6 / bottom 4
 #define V1_SLOT_H    11
 #define NUB_PX        8
 #define GAP_PX        8
 
+// TEMP TEST: force a worst-case-width date ("Wed, Dec 30"). Set to 0 to use the real date.
+#define DEBUG_FIXED_DATE 1
+
 // Fonts: 1 = built-in Pebble fonts (no resources needed), 0 = custom Arial (FONT_ARIAL_11/18)
 #define USE_SYSTEM_FONTS 1
 #if USE_SYSTEM_FONTS
-  #define LABEL_FONT_KEY  FONT_KEY_GOTHIC_14_BOLD   // or FONT_KEY_GOTHIC_14
-  #define DATE_FONT_KEY   FONT_KEY_LECO_20_BOLD_NUMBERS   // or FONT_KEY_GOTHIC_18_BOLD / FONT_KEY_GOTHIC_18
-  #define LABEL_DY        1   // measured in simulator (aplite): digit centers land exactly on tick lines
+  #if defined(PBL_PLATFORM_EMERY)
+    // Emery (200x228): one size up. Values below are ESTIMATES until measured in the simulator.
+    #define LABEL_FONT_KEY  FONT_KEY_GOTHIC_18_BOLD
+    #define DATE_FONT_KEY   FONT_KEY_LECO_26_BOLD_NUMBERS_AM_PM  // if letters are missing: FONT_KEY_GOTHIC_24_BOLD
+    #define LABEL_LH        22
+    #define LABEL_DY         1
+    #define EMERY_BAR_BOT  192
+    #define EMERY_SLOT_H    15
+    #define EMERY_DATE_Y   196
+  #else
+    // Aplite / diorite / flint (144x168): locked.
+    #define LABEL_FONT_KEY  FONT_KEY_GOTHIC_14_BOLD   // or FONT_KEY_GOTHIC_14
+    #define DATE_FONT_KEY   FONT_KEY_LECO_20_BOLD_NUMBERS   // or FONT_KEY_GOTHIC_18_BOLD
+    #define LABEL_LH        16
+    #define LABEL_DY         1   // measured in simulator (aplite): digit centers land exactly on tick lines
+  #endif
 #else
-  #define LABEL_DY        1   // Arial 11 in a 16px box (was 3 in a 12px box)
+  #define LABEL_LH          16
+  #define LABEL_DY           1   // Arial 11 in a 16px box (was 3 in a 12px box)
 #endif
 
 #define ROUND_BAR_W    22
@@ -130,9 +147,15 @@ static void draw_rect(GContext *ctx, int w, int h) {
   int hx      = (V1_HX      * w) / 144;
   int bw      = (V1_BAR_W   * w) / 144;
   int mx      = (V1_MX      * w) / 144;
+#if defined(PBL_PLATFORM_EMERY) && USE_SYSTEM_FONTS
+  int bar_bot = EMERY_BAR_BOT;
+  int slot_h  = EMERY_SLOT_H;
+  int date_y  = EMERY_DATE_Y;
+#else
   int bar_bot = (V1_BAR_BOT * h) / 168;
   int slot_h  = (V1_SLOT_H  * h) / 168;
   int date_y  = (V1_DATE_Y  * h) / 168;
+#endif
 
   if (slot_h < 2) slot_h = 2;
   if (bw < 20) bw = 20;
@@ -151,7 +174,7 @@ static void draw_rect(GContext *ctx, int w, int h) {
   int h_label_w = hx - NUB_PX - GAP_PX;
   int m_label_x = mx + bw + NUB_PX + GAP_PX;
   int m_label_w = w - m_label_x;
-  int lh = 16;   // tall enough for Gothic 14 (Arial 11 fits in less)
+  int lh = LABEL_LH;
 
   // ---- 1. Tick lines + nubs (before fills) ----
   graphics_context_set_stroke_width(ctx, 1);
@@ -351,6 +374,9 @@ static void tick_handler(struct tm *t, TimeUnits u) {
   s_hour   = t->tm_hour;
   s_minute = t->tm_min;
   strftime(s_date_buf, sizeof(s_date_buf), "%a, %b %e", t);
+#if DEBUG_FIXED_DATE
+  snprintf(s_date_buf, sizeof(s_date_buf), "Wed, Dec 30");
+#endif
   layer_mark_dirty(s_canvas_layer);
 }
 
