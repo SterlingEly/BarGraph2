@@ -1,7 +1,7 @@
 #include <pebble.h>
 
 // ============================================================
-// Bar Graph 2 — main.c  v2.21 (flint/emery locked; aplite/basalt/diorite date Gothic 24 Bold; round: wider bars + more label space)
+// Bar Graph 2 — main.c  v2.22 (aplite/basalt/diorite date nudged up 2px; flint/emery/chalk/gabbro approved)
 // Fixes:
 //   1. Separator cut: only when ty > h_fill_top (fill strictly
 //      above the line, not just at it) — prevents premature flip
@@ -56,9 +56,9 @@
       #define DATE_FONT_KEY FONT_KEY_GOTHIC_18_BOLD
       #define DATE_Y_ADJ     3
     #else
-      // aplite / basalt / diorite: one size up (Gothic 24 Bold). ESTIMATE: box offset, 1px higher than before.
+      // aplite / basalt / diorite: Gothic 24 Bold, approved size; nudged up 2px from v2.21.
       #define DATE_FONT_KEY FONT_KEY_GOTHIC_24_BOLD
-      #define DATE_Y_ADJ    -1
+      #define DATE_Y_ADJ    -3
     #endif
   #endif
 #else
