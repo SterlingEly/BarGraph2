@@ -1,104 +1,235 @@
-// ============================================================
-// Bar Graph 2 — config.js
-// Self-contained HTML config page (no pebble-clay dependency).
-// Returns a data URI that Pebble opens as the settings page.
-// ============================================================
+// Bar Graph 2 configuration page (generated from an HTML template; ES5-safe).
+var HTML = [
+  "<!DOCTYPE html>",
+  "<html><head><meta charset=\"utf-8\">",
+  "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, user-scalable=no\">",
+  "<title>Bar Graph 2</title>",
+  "<style>",
+  "*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}",
+  "body{margin:0;padding:14px 14px 90px;background:#111;color:#eee;font:15px -apple-system,Roboto,Helvetica,Arial,sans-serif}",
+  "h1{font-size:20px;margin:4px 0 2px}",
+  ".sub{color:#888;font-size:12px;margin-bottom:14px}",
+  ".card{background:#1d1d1d;border-radius:12px;padding:12px;margin-bottom:14px}",
+  ".card h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#999;margin:0 0 10px}",
+  ".prow{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}",
+  ".rowlabel{font-size:11px;color:#777;margin:6px 0 4px}",
+  ".pill{width:calc(25% - 5px);padding:6px 2px;border-radius:8px;border:1px solid #333;text-align:center;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+  ".pill:active{opacity:.6}",
+  ".row{display:flex;align-items:center;min-height:44px;border-bottom:1px solid #2a2a2a}",
+  ".row:last-child{border-bottom:0}",
+  ".row .name{flex:1}",
+  ".row .tog{width:32px;height:32px;margin-right:6px;border-radius:8px;border:1px solid #444;text-align:center;line-height:30px;font-size:18px;color:#aaa;flex:none}",
+  ".row .tog.empty{border:0}",
+  ".sw{width:44px;height:28px;border-radius:8px;border:2px solid #666;flex:none}",
+  ".sub-rows{margin-left:20px;border-left:2px solid #2a2a2a;padding-left:8px}",
+  ".sub-rows.hidden{display:none}",
+  ".switch{display:flex;align-items:center;justify-content:space-between;min-height:44px}",
+  ".switch small{display:block;color:#888;font-size:11px}",
+  "input[type=checkbox]{width:44px;height:26px;appearance:none;-webkit-appearance:none;background:#444;border-radius:13px;position:relative;flex:none}",
+  "input[type=checkbox]::after{content:\"\";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:10px;background:#fff;transition:left .15s}",
+  "input[type=checkbox]:checked{background:#2a8}",
+  "input[type=checkbox]:checked::after{left:21px}",
+  ".save{position:fixed;left:0;right:0;bottom:0;padding:12px 14px;background:#111;border-top:1px solid #2a2a2a}",
+  ".save button{width:100%;height:48px;border:0;border-radius:12px;background:#2a8;color:#fff;font-size:17px;font-weight:600}",
+  "#modal{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:5}",
+  "#modal.on{display:flex}",
+  "#mbox{background:#222;border-radius:14px;padding:12px;width:92%;max-width:380px}",
+  "#mtitle{font-size:13px;color:#aaa;margin-bottom:8px}",
+  "#grid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}",
+  "#grid div{aspect-ratio:1;border-radius:6px;border:2px solid transparent}",
+  "#grid div.sel{border-color:#fff}",
+  ".hidden{display:none}",
+  "</style></head><body>",
+  "<h1>Bar Graph 2</h1>",
+  "<div class=\"sub\">Hours on the left, minutes on the right.</div>",
+  "",
+  "<div id=\"color-section\" class=\"hidden\">",
+  "  <div class=\"card\"><h2>Presets</h2><div id=\"presets\"></div></div>",
+  "  <div class=\"card\"><h2>Colors</h2><div id=\"tree\"></div></div>",
+  "</div>",
+  "",
+  "<div id=\"bw-section\" class=\"hidden\">",
+  "  <div class=\"card\"><h2>Display</h2>",
+  "    <label class=\"switch\"><span>Invert (black on white)</span><input type=\"checkbox\" id=\"invert\"></label>",
+  "    <label class=\"switch\"><span>Show unfilled track<small>Experimental: gray on black-and-white watches</small></span><input type=\"checkbox\" id=\"track\"></label>",
+  "  </div>",
+  "</div>",
+  "",
+  "<div class=\"card\"><h2>General</h2>",
+  "  <label class=\"switch\"><span>24-hour bar<small>Hour bar fills across 24 hours instead of 12</small></span><input type=\"checkbox\" id=\"h24\"></label>",
+  "</div>",
+  "",
+  "<div class=\"save\"><button id=\"savebtn\">Save</button></div>",
+  "<div id=\"modal\"><div id=\"mbox\"><div id=\"mtitle\"></div><div id=\"grid\"></div></div></div>",
+  "",
+  "<script>",
+  "var PLATFORM = \"__PLATFORM__\";",
+  "var CURRENT = __CURRENT__;",
+  "",
+  "var DEFAULTS = {BackgroundColor:\"#000000\",DateColor:\"#ffffff\",HourDigitColor:\"#ffffff\",MinuteDigitColor:\"#ffffff\",",
+  "  HourLineColor:\"#ffffff\",MinuteLineColor:\"#ffffff\",HourLitColor:\"#ffffff\",MinuteLitColor:\"#ffffff\",",
+  "  HourDimColor:\"#000000\",MinuteDimColor:\"#000000\",InvertBW:false,ShowTrack:false,Show24h:false};",
+  "",
+  "// Pebble 64-color palette: each channel 00/55/aa/ff. Grays first, then by hue.",
+  "var PALETTE = (function(){",
+  "  var v=[0,85,170,255], out=[], i,j,k;",
+  "  function hex(n){return (n<16?\"0\":\"\")+n.toString(16);}",
+  "  for(i=0;i<4;i++)for(j=0;j<4;j++)for(k=0;k<4;k++){",
+  "    var r=v[i],g=v[j],b=v[k], mx=Math.max(r,g,b), mn=Math.min(r,g,b), h=0;",
+  "    if(mx!==mn){",
+  "      var d=mx-mn;",
+  "      if(mx===r)h=((g-b)/d+6)%6; else if(mx===g)h=(b-r)/d+2; else h=(r-g)/d+4;",
+  "    }",
+  "    out.push({c:\"#\"+hex(r)+hex(g)+hex(b),gray:mx===mn,h:h,l:mx+mn,s:mx-mn});",
+  "  }",
+  "  out.sort(function(a,b){",
+  "    if(a.gray!==b.gray)return a.gray?-1:1;",
+  "    if(a.gray)return a.l-b.l;",
+  "    if(a.h!==b.h)return a.h-b.h;",
+  "    return a.l-b.l;",
+  "  });",
+  "  return out.map(function(o){return o.c;});",
+  "})();",
+  "",
+  "// Preset field order: label, bg, date, hourDigit, minDigit, hourLine, minLine, hourFilled, minFilled, hourUnfilled, minUnfilled",
+  "// Colors are 3-digit shorthand using the palette nibbles 0/5/a/f.",
+  "function P(l,bg,dt,hd,md,hl,ml,hf,mf,hu,mu){return {label:l,v:[bg,dt,hd,md,hl,ml,hf,mf,hu,mu]};}",
+  "function S(l,bg,text,lit,dim){return P(l,bg,text,lit,lit,lit,lit,lit,lit,dim,dim);}",
+  "function D(l,tx,hc,mc,hd,md){return P(l,\"000\",tx,hc,mc,hc,mc,hc,mc,hd,md);}",
+  "var PRESET_ROWS = [",
+  " {name:\"Dark\",items:[",
+  "  S(\"Classic\",\"000\",\"fff\",\"fff\",\"000\"),S(\"Radium\",\"000\",\"fff\",\"0f0\",\"050\"),S(\"Scarlet\",\"000\",\"fff\",\"f00\",\"500\"),S(\"Ember\",\"000\",\"fff\",\"f50\",\"500\"),",
+  "  S(\"Cobalt\",\"000\",\"fff\",\"05f\",\"005\"),S(\"Volt\",\"000\",\"fff\",\"ff0\",\"550\"),S(\"Violet\",\"000\",\"fff\",\"a5f\",\"505\"),S(\"Slate\",\"000\",\"fff\",\"aaa\",\"555\")]},",
+  " {name:\"Dark, two-tone\",items:[",
+  "  D(\"Ocean\",\"fff\",\"0af\",\"0ff\",\"005\",\"055\"),D(\"Aurora\",\"fff\",\"0f5\",\"a5f\",\"050\",\"505\"),D(\"Solar\",\"fff\",\"ff0\",\"f50\",\"550\",\"500\"),D(\"Venom\",\"fff\",\"5f0\",\"f0a\",\"050\",\"500\"),",
+  "  D(\"Reactor\",\"fff\",\"f50\",\"0ff\",\"500\",\"055\"),D(\"Neon\",\"fff\",\"f0f\",\"0f5\",\"505\",\"050\"),D(\"Blossom\",\"fff\",\"f5a\",\"faa\",\"505\",\"500\"),D(\"Prism\",\"fff\",\"f00\",\"05f\",\"500\",\"005\")]},",
+  " {name:\"Light\",items:[",
+  "  S(\"Paper\",\"fff\",\"000\",\"000\",\"aaa\"),S(\"Jade\",\"fff\",\"000\",\"0a5\",\"afa\"),S(\"Sapphire\",\"fff\",\"000\",\"05a\",\"aaf\"),S(\"Ruby\",\"fff\",\"000\",\"a00\",\"faa\"),",
+  "  S(\"Mint\",\"fff\",\"000\",\"0aa\",\"aff\"),S(\"Rose\",\"fff\",\"000\",\"f05\",\"faa\"),S(\"Lavender\",\"fff\",\"000\",\"55f\",\"aaf\"),S(\"Sepia\",\"ffa\",\"550\",\"a50\",\"fa5\")]},",
+  " {name:\"Color\",items:[",
+  "  S(\"Teal\",\"055\",\"fff\",\"fff\",\"0aa\"),S(\"Flame\",\"500\",\"fff\",\"ff0\",\"a00\"),S(\"Midnight\",\"005\",\"aff\",\"0af\",\"00a\"),S(\"Forest\",\"050\",\"fff\",\"afa\",\"0a0\"),",
+  "  S(\"Plum\",\"505\",\"fff\",\"faf\",\"a0a\"),S(\"Poison\",\"550\",\"fff\",\"ffa\",\"aa0\"),S(\"Ultraviolet\",\"50a\",\"fff\",\"0ff\",\"55f\"),S(\"Ash\",\"555\",\"fff\",\"fff\",\"aaa\")]}",
+  "];",
+  "var KEYS_ORDER = [\"BackgroundColor\",\"DateColor\",\"HourDigitColor\",\"MinuteDigitColor\",\"HourLineColor\",\"MinuteLineColor\",\"HourLitColor\",\"MinuteLitColor\",\"HourDimColor\",\"MinuteDimColor\"];",
+  "",
+  "function exp(c){return \"#\"+c.charAt(0)+c.charAt(0)+c.charAt(1)+c.charAt(1)+c.charAt(2)+c.charAt(2);}",
+  "",
+  "var TREE = [",
+  " {key:\"Text\",label:\"Text\",kids:[",
+  "   {key:\"DateColor\",label:\"Date\"},",
+  "   {key:\"Digits\",label:\"Digits\",kids:[{key:\"HourDigitColor\",label:\"Hours\"},{key:\"MinuteDigitColor\",label:\"Minutes\"}]}]},",
+  " {key:\"Filled\",label:\"Filled bars\",kids:[{key:\"HourLitColor\",label:\"Hours\"},{key:\"MinuteLitColor\",label:\"Minutes\"}]},",
+  " {key:\"Unfilled\",label:\"Unfilled bars\",kids:[{key:\"HourDimColor\",label:\"Hours\"},{key:\"MinuteDimColor\",label:\"Minutes\"}]},",
+  " {key:\"Lines\",label:\"Lines\",kids:[{key:\"HourLineColor\",label:\"Hours\"},{key:\"MinuteLineColor\",label:\"Minutes\"}]},",
+  " {key:\"BackgroundColor\",label:\"Background\"}",
+  "];",
+  "",
+  "function leaves(n){",
+  "  if(!n.kids)return [n.key];",
+  "  var o=[],i;",
+  "  for(i=0;i<n.kids.length;i++)o=o.concat(leaves(n.kids[i]));",
+  "  return o;",
+  "}",
+  "",
+  "var s = {}, open = {}, target = null, k;",
+  "for(k in DEFAULTS)s[k]=DEFAULTS[k];",
+  "for(k in CURRENT)if(DEFAULTS.hasOwnProperty(k))s[k]=CURRENT[k];",
+  "",
+  "function swatchStyle(n){",
+  "  var ls=leaves(n), cols=[], i;",
+  "  for(i=0;i<ls.length;i++)cols.push(s[ls[i]]);",
+  "  var same=true;",
+  "  for(i=1;i<cols.length;i++)if(cols[i]!==cols[0])same=false;",
+  "  if(same)return \"background:\"+cols[0];",
+  "  var st=[],step=100/cols.length;",
+  "  for(i=0;i<cols.length;i++)st.push(cols[i]+\" \"+(i*step)+\"% \"+((i+1)*step)+\"%\");",
+  "  return \"background:linear-gradient(90deg,\"+st.join(\",\")+\")\";",
+  "}",
+  "",
+  "function el(tag,cls,html){var e=document.createElement(tag);if(cls)e.className=cls;if(html!==undefined)e.innerHTML=html;return e;}",
+  "",
+  "function renderNode(n,parent){",
+  "  var row=el(\"div\",\"row\"), tog=el(\"div\",\"tog\"+(n.kids?\"\":\" empty\"),n.kids?(open[n.key]?\"&minus;\":\"+\"):\"\");",
+  "  var name=el(\"div\",\"name\",n.label), sw=el(\"div\",\"sw\");",
+  "  sw.setAttribute(\"style\",swatchStyle(n));",
+  "  row.appendChild(tog);row.appendChild(name);row.appendChild(sw);",
+  "  parent.appendChild(row);",
+  "  sw.onclick=function(){openPicker(n);};",
+  "  if(n.kids){",
+  "    var sub=el(\"div\",\"sub-rows\"+(open[n.key]?\"\":\" hidden\"));",
+  "    parent.appendChild(sub);",
+  "    var i;for(i=0;i<n.kids.length;i++)renderNode(n.kids[i],sub);",
+  "    var t=function(){open[n.key]=!open[n.key];render();};",
+  "    tog.onclick=t;name.onclick=t;",
+  "  }",
+  "}",
+  "",
+  "function render(){",
+  "  var tree=document.getElementById(\"tree\");",
+  "  tree.innerHTML=\"\";",
+  "  var i;for(i=0;i<TREE.length;i++)renderNode(TREE[i],tree);",
+  "}",
+  "",
+  "function applyPreset(p){",
+  "  var i;for(i=0;i<KEYS_ORDER.length;i++)s[KEYS_ORDER[i]]=exp(p.v[i]);",
+  "  render();",
+  "}",
+  "",
+  "function renderPresets(){",
+  "  var box=document.getElementById(\"presets\"),r,i;",
+  "  for(r=0;r<PRESET_ROWS.length;r++){",
+  "    box.appendChild(el(\"div\",\"rowlabel\",PRESET_ROWS[r].name));",
+  "    var wrap=el(\"div\",\"prow\");",
+  "    for(i=0;i<PRESET_ROWS[r].items.length;i++){",
+  "      (function(p){",
+  "        var d=el(\"div\",\"pill\",p.label);",
+  "        d.setAttribute(\"style\",\"background:\"+exp(p.v[0])+\";color:\"+exp(p.v[6])+\";border-color:\"+exp(p.v[8]));",
+  "        d.onclick=function(){applyPreset(p);};",
+  "        wrap.appendChild(d);",
+  "      })(PRESET_ROWS[r].items[i]);",
+  "    }",
+  "    box.appendChild(wrap);",
+  "  }",
+  "}",
+  "",
+  "function openPicker(n){",
+  "  target=n;",
+  "  document.getElementById(\"mtitle\").innerHTML=n.label+(n.kids?\" (sets all)\":\"\");",
+  "  var g=document.getElementById(\"grid\");g.innerHTML=\"\";",
+  "  var cur=s[leaves(n)[0]],i;",
+  "  for(i=0;i<PALETTE.length;i++){",
+  "    (function(c){",
+  "      var d=el(\"div\",c===cur?\"sel\":\"\");",
+  "      d.setAttribute(\"style\",\"background:\"+c);",
+  "      d.onclick=function(){",
+  "        var ls=leaves(target),j;for(j=0;j<ls.length;j++)s[ls[j]]=c;",
+  "        closePicker();render();",
+  "      };",
+  "      g.appendChild(d);",
+  "    })(PALETTE[i]);",
+  "  }",
+  "  document.getElementById(\"modal\").className=\"on\";",
+  "}",
+  "function closePicker(){document.getElementById(\"modal\").className=\"\";}",
+  "document.getElementById(\"modal\").onclick=function(e){if(e.target===this)closePicker();};",
+  "",
+  "var inv=document.getElementById(\"invert\"),trk=document.getElementById(\"track\"),h24=document.getElementById(\"h24\");",
+  "inv.checked=!!s.InvertBW;trk.checked=!!s.ShowTrack;h24.checked=!!s.Show24h;",
+  "document.getElementById(PLATFORM===\"bw\"?\"bw-section\":\"color-section\").className=\"\";",
+  "renderPresets();render();",
+  "",
+  "document.getElementById(\"savebtn\").onclick=function(){",
+  "  s.InvertBW=inv.checked;s.ShowTrack=trk.checked;s.Show24h=h24.checked;",
+  "  window.location=\"pebblejs://close#\"+encodeURIComponent(JSON.stringify(s));",
+  "};",
+  "</script></body></html>",
+  ""
+].join('\n');
 
-module.exports = function(currentSettings) {
-  var s = currentSettings || {};
-
-  function v(key, def) {
-    return (s[key] !== undefined) ? s[key] : def;
-  }
-
-  function colorRow(key, label, val) {
-    return '<div class="row"><label>' + label + '</label>'
-      + '<input type="color" data-key="' + key + '" value="' + val + '"></div>';
-  }
-
-  function toggleRow(key, label, val) {
-    return '<div class="row"><label>' + label + '</label>'
-      + '<label class="toggle"><input type="checkbox" data-key="' + key + '"'
-      + (val ? ' checked' : '') + '><span class="slider-toggle"></span></label></div>';
-  }
-
-  function rangeRow(key, label, val, min, max, step) {
-    return '<div class="row"><label>' + label + '</label>'
-      + '<div style="display:flex;align-items:center;gap:8px;">'
-      + '<input type="range" data-key="' + key + '" min="' + min + '" max="' + max
-      + '" step="' + step + '" value="' + val + '">'
-      + '<span class="range-val">' + val + '</span></div></div>';
-  }
-
-  var html = '<!DOCTYPE html><html><head><meta charset="utf-8">'
-    + '<meta name="viewport" content="width=device-width,initial-scale=1">'
-    + '<title>Bar Graph 2</title>'
-    + '<style>'
-    + 'body{font-family:sans-serif;background:#1a1a1a;color:#eee;margin:0;padding:16px;box-sizing:border-box;}'
-    + 'h1{font-size:1.2em;margin:0 0 16px;color:#fff;}'
-    + 'h2{font-size:0.9em;color:#aaa;margin:20px 0 8px;text-transform:uppercase;letter-spacing:0.05em;}'
-    + '.row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #333;}'
-    + '.row:last-child{border-bottom:none;}'
-    + 'label{font-size:0.95em;}'
-    + 'input[type=color]{width:44px;height:32px;border:none;border-radius:4px;cursor:pointer;background:none;}'
-    + 'input[type=range]{width:140px;}'
-    + '.toggle{position:relative;width:44px;height:24px;}'
-    + '.toggle input{opacity:0;width:0;height:0;}'
-    + '.slider-toggle{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#555;border-radius:24px;transition:.2s;}'
-    + '.slider-toggle:before{position:absolute;content:"";height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s;}'
-    + 'input:checked+.slider-toggle{background:#2196F3;}'
-    + 'input:checked+.slider-toggle:before{transform:translateX(20px);}'
-    + '.section{background:#252525;border-radius:8px;padding:0 14px;margin-bottom:16px;}'
-    + '.range-val{font-size:0.85em;color:#aaa;min-width:48px;text-align:right;}'
-    + 'button{width:100%;padding:14px;background:#2196F3;color:#fff;border:none;border-radius:8px;font-size:1em;cursor:pointer;margin-top:8px;}'
-    + 'button:active{background:#1976D2;}'
-    + '</style></head><body>'
-    + '<h1>Bar Graph 2</h1>'
-
-    + '<h2>Bars</h2><div class="section">'
-    + colorRow('BarLitColor',    'Filled bar color',   v('BarLitColor',    '#FFFFFF'))
-    + colorRow('BarDimColor',    'Empty track color',  v('BarDimColor',    '#555555'))
-    + colorRow('DateTextColor',  'Text & tick color',  v('DateTextColor',  '#FFFFFF'))
-    + colorRow('BackgroundColor','Background color',   v('BackgroundColor','#000000'))
-    + '</div>'
-
-    + '<h2>Hour Display</h2><div class="section">'
-    + toggleRow('Show24h', '24-hour mode', v('Show24h', false))
-    + '</div>'
-
-    + '<h2>Battery &amp; Steps Ring</h2><div class="section">'
-    + toggleRow('ShowRing',      'Show ring',          v('ShowRing', true))
-    + colorRow('RingBattColor',  'Battery fill color', v('RingBattColor',  '#FFFFFF'))
-    + colorRow('RingStepsColor', 'Steps fill color',   v('RingStepsColor', '#FFFFFF'))
-    + colorRow('RingDimColor',   'Ring track color',   v('RingDimColor',   '#555555'))
-    + rangeRow('StepGoal', 'Daily step goal', v('StepGoal', 10000), 1000, 30000, 500)
-    + '</div>'
-
-    + '<h2>Black &amp; White Watches</h2><div class="section">'
-    + toggleRow('InvertBW', 'Invert (white background)', v('InvertBW', false))
-    + '</div>'
-
-    + '<button onclick="save()">Save</button>'
-
-    + '<script>'
-    + 'function save(){'
-    + '  var r={};'
-    + '  document.querySelectorAll("input[data-key]").forEach(function(el){'
-    + '    var k=el.dataset.key;'
-    + '    if(el.type==="color") r[k]=el.value;'
-    + '    else if(el.type==="checkbox") r[k]=el.checked;'
-    + '    else if(el.type==="range") r[k]=parseInt(el.value,10);'
-    + '  });'
-    + '  var loc=window.location.href;'
-    + '  var ret=loc.substring(0,loc.indexOf("?"));'
-    + '  document.location=ret+"?return_to=pebblejs%3A%2F%2Fback#"+encodeURIComponent(JSON.stringify(r));'
-    + '}'
-    + 'document.querySelectorAll("input[type=range]").forEach(function(el){'
-    + '  var d=el.parentNode.querySelector(".range-val");'
-    + '  if(d) el.addEventListener("input",function(){d.textContent=el.value;});'
-    + '});'
-    + '</script>'
-    + '</body></html>';
-
+function buildUrl(platform, current) {
+  var html = HTML.replace('__PLATFORM__', platform === 'bw' ? 'bw' : 'color')
+                 .replace('__CURRENT__', function () { return JSON.stringify(current || {}); });
   return 'data:text/html,' + encodeURIComponent(html);
-};
+}
+
+module.exports = { buildUrl: buildUrl };
