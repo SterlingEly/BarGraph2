@@ -1,7 +1,7 @@
 #include <pebble.h>
 
 // ============================================================
-// Bar Graph 2 — main.c  v2.13 (slot 12px, bar top y=4, label font Arial 11)
+// Bar Graph 2 — main.c  v2.15 (slot 11px, bar top y=8; system fonts, switchable)
 // Fixes:
 //   1. Separator cut: only when ty > h_fill_top (fill strictly
 //      above the line, not just at it) — prevents premature flip
@@ -11,15 +11,25 @@
 
 #define SETTINGS_KEY 1
 
-#define V1_BAR_BOT  148
-#define V1_BAR_TOP    4
+#define V1_BAR_BOT  140
+#define V1_BAR_TOP    8
 #define V1_HX        38
 #define V1_BAR_W     30
 #define V1_MX        76
-#define V1_DATE_Y   148
-#define V1_SLOT_H    12
+#define V1_DATE_Y   146
+#define V1_SLOT_H    11
 #define NUB_PX        8
 #define GAP_PX        8
+
+// Fonts: 1 = built-in Pebble fonts (no resources needed), 0 = custom Arial (FONT_ARIAL_11/18)
+#define USE_SYSTEM_FONTS 1
+#if USE_SYSTEM_FONTS
+  #define LABEL_FONT_KEY  FONT_KEY_GOTHIC_14   // swap to FONT_KEY_GOTHIC_14_BOLD for bold digits
+  #define DATE_FONT_KEY   FONT_KEY_GOTHIC_18
+  #define LABEL_DY        1   // ESTIMATE for Gothic 14 — lifts digits so their center sits on the tick line; re-measure from a screenshot
+#else
+  #define LABEL_DY        1   // Arial 11 in a 16px box (was 3 in a 12px box)
+#endif
 
 #define ROUND_BAR_W    22
 #define ROUND_BAR_GAP  10
@@ -141,7 +151,7 @@ static void draw_rect(GContext *ctx, int w, int h) {
   int h_label_w = hx - NUB_PX - GAP_PX;
   int m_label_x = mx + bw + NUB_PX + GAP_PX;
   int m_label_w = w - m_label_x;
-  int lh = 12;
+  int lh = 16;   // tall enough for Gothic 14 (Arial 11 fits in less)
 
   // ---- 1. Tick lines + nubs (before fills) ----
   graphics_context_set_stroke_width(ctx, 1);
@@ -197,7 +207,7 @@ static void draw_rect(GContext *ctx, int w, int h) {
     int step = show24 ? 2 : 1;
     for (int i = 0; i <= max_h; i += step) {
       int ty = bar_bot - (show24 ? (bar_h * i / 24) : (slot_h * i));
-      int ly = ty - lh / 2;
+      int ly = ty - lh / 2 - LABEL_DY;
       if (ly + lh < bar_top - lh || ly > bar_bot + lh) continue;
       snprintf(buf, sizeof(buf), "%02d", i);
       graphics_draw_text(ctx, buf, s_font_label,
@@ -209,7 +219,7 @@ static void draw_rect(GContext *ctx, int w, int h) {
     char buf[4];
     for (int i = 0; i <= 12; i++) {
       int ty = bar_bot - slot_h * i;
-      int ly = ty - lh / 2;
+      int ly = ty - lh / 2 - LABEL_DY;
       if (ly + lh < bar_top - lh || ly > bar_bot + lh) continue;
       snprintf(buf, sizeof(buf), "%02d", i * 5);
       graphics_draw_text(ctx, buf, s_font_label,
@@ -385,7 +395,11 @@ static void window_unload(Window *window) {
 
 static void init(void) {
   prv_load_settings();
-#ifdef RESOURCE_ID_FONT_ARIAL_11
+#if USE_SYSTEM_FONTS
+  s_font_label   = fonts_get_system_font(LABEL_FONT_KEY);
+  s_font_date    = fonts_get_system_font(DATE_FONT_KEY);
+  s_custom_fonts = false;
+#elif defined(RESOURCE_ID_FONT_ARIAL_11)
   s_font_label   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ARIAL_11));
   s_font_date    = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ARIAL_18));
   s_custom_fonts = true;
