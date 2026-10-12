@@ -1,7 +1,7 @@
 #include <pebble.h>
 
 // ============================================================
-// Bar Graph 2 — main.c  v2.16 (slot 11px, bar top y=8; Gothic 14 Bold digits, Leco 20 date)
+// Bar Graph 2 — main.c  v2.17 (slot 11px, bar top y=8; Gothic 14 Bold digits, Leco 20 date, date y=144)
 // Fixes:
 //   1. Separator cut: only when ty > h_fill_top (fill strictly
 //      above the line, not just at it) — prevents premature flip
@@ -16,7 +16,7 @@
 #define V1_HX        38
 #define V1_BAR_W     30
 #define V1_MX        76
-#define V1_DATE_Y   146
+#define V1_DATE_Y   144
 #define V1_SLOT_H    11
 #define NUB_PX        8
 #define GAP_PX        8
@@ -26,7 +26,7 @@
 #if USE_SYSTEM_FONTS
   #define LABEL_FONT_KEY  FONT_KEY_GOTHIC_14_BOLD   // or FONT_KEY_GOTHIC_14
   #define DATE_FONT_KEY   FONT_KEY_LECO_20_BOLD_NUMBERS   // or FONT_KEY_GOTHIC_18_BOLD / FONT_KEY_GOTHIC_18
-  #define LABEL_DY        1   // ESTIMATE for Gothic 14 — lifts digits so their center sits on the tick line; re-measure from a screenshot
+  #define LABEL_DY        1   // measured in simulator (aplite): digit centers land exactly on tick lines
 #else
   #define LABEL_DY        1   // Arial 11 in a 16px box (was 3 in a 12px box)
 #endif
