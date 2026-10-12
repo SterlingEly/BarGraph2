@@ -1,7 +1,7 @@
 #include <pebble.h>
 
 // ============================================================
-// Bar Graph 2 — main.c  v2.18 (aplite margins tweak; emery: Gothic 18 Bold digits, Leco 26 date; fixed test date)
+// Bar Graph 2 — main.c  v2.19 (Leco date only on flint/emery/gabbro; Gothic 18 Bold date elsewhere)
 // Fixes:
 //   1. Separator cut: only when ty > h_fill_top (fill strictly
 //      above the line, not just at it) — prevents premature flip
@@ -25,27 +25,39 @@
 #define DEBUG_FIXED_DATE 1
 
 // Fonts: 1 = built-in Pebble fonts (no resources needed), 0 = custom Arial (FONT_ARIAL_11/18)
+// NOTE: Leco only has real letters on newer firmware (flint, emery, gabbro). On aplite,
+// basalt, chalk and diorite it renders letters as junk boxes, so those use Gothic 18 Bold.
+// DATE_Y_ADJ shifts the date box so different fonts land the glyphs in the same place.
 #define USE_SYSTEM_FONTS 1
 #if USE_SYSTEM_FONTS
   #if defined(PBL_PLATFORM_EMERY)
-    // Emery (200x228): one size up. Values below are ESTIMATES until measured in the simulator.
+    // Emery (200x228): one size up from the small platforms.
     #define LABEL_FONT_KEY  FONT_KEY_GOTHIC_18_BOLD
-    #define DATE_FONT_KEY   FONT_KEY_LECO_26_BOLD_NUMBERS_AM_PM  // if letters are missing: FONT_KEY_GOTHIC_24_BOLD
+    #define DATE_FONT_KEY   FONT_KEY_LECO_26_BOLD_NUMBERS_AM_PM
+    #define DATE_Y_ADJ       0
     #define LABEL_LH        22
     #define LABEL_DY         1
     #define EMERY_BAR_BOT  192
     #define EMERY_SLOT_H    15
     #define EMERY_DATE_Y   196
   #else
-    // Aplite / diorite / flint (144x168): locked.
+    // 144x168 and round platforms
     #define LABEL_FONT_KEY  FONT_KEY_GOTHIC_14_BOLD   // or FONT_KEY_GOTHIC_14
-    #define DATE_FONT_KEY   FONT_KEY_LECO_20_BOLD_NUMBERS   // or FONT_KEY_GOTHIC_18_BOLD
     #define LABEL_LH        16
-    #define LABEL_DY         1   // measured in simulator (aplite): digit centers land exactly on tick lines
+    #define LABEL_DY         1   // measured in simulator: digit centers land exactly on tick lines
+    #if defined(PBL_PLATFORM_FLINT) || defined(PBL_PLATFORM_GABBRO)
+      #define DATE_FONT_KEY FONT_KEY_LECO_20_BOLD_NUMBERS
+      #define DATE_Y_ADJ     0
+    #else
+      // aplite / basalt / chalk / diorite. ESTIMATE: Gothic glyphs sit ~3px higher in the box than Leco's.
+      #define DATE_FONT_KEY FONT_KEY_GOTHIC_18_BOLD
+      #define DATE_Y_ADJ     3
+    #endif
   #endif
 #else
   #define LABEL_LH          16
   #define LABEL_DY           1   // Arial 11 in a 16px box (was 3 in a 12px box)
+  #define DATE_Y_ADJ         0
 #endif
 
 #define ROUND_BAR_W    22
@@ -157,6 +169,7 @@ static void draw_rect(GContext *ctx, int w, int h) {
   int date_y  = (V1_DATE_Y  * h) / 168;
 #endif
 
+  date_y += DATE_Y_ADJ;
   if (slot_h < 2) slot_h = 2;
   if (bw < 20) bw = 20;
 
