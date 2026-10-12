@@ -1,7 +1,7 @@
 #include <pebble.h>
 
 // ============================================================
-// Bar Graph 2 — main.c  v2.15 (slot 11px, bar top y=8; system fonts, switchable)
+// Bar Graph 2 — main.c  v2.16 (slot 11px, bar top y=8; Gothic 14 Bold digits, Leco 20 date)
 // Fixes:
 //   1. Separator cut: only when ty > h_fill_top (fill strictly
 //      above the line, not just at it) — prevents premature flip
@@ -24,8 +24,8 @@
 // Fonts: 1 = built-in Pebble fonts (no resources needed), 0 = custom Arial (FONT_ARIAL_11/18)
 #define USE_SYSTEM_FONTS 1
 #if USE_SYSTEM_FONTS
-  #define LABEL_FONT_KEY  FONT_KEY_GOTHIC_14   // swap to FONT_KEY_GOTHIC_14_BOLD for bold digits
-  #define DATE_FONT_KEY   FONT_KEY_GOTHIC_18
+  #define LABEL_FONT_KEY  FONT_KEY_GOTHIC_14_BOLD   // or FONT_KEY_GOTHIC_14
+  #define DATE_FONT_KEY   FONT_KEY_LECO_20_BOLD_NUMBERS   // or FONT_KEY_GOTHIC_18_BOLD / FONT_KEY_GOTHIC_18
   #define LABEL_DY        1   // ESTIMATE for Gothic 14 — lifts digits so their center sits on the tick line; re-measure from a screenshot
 #else
   #define LABEL_DY        1   // Arial 11 in a 16px box (was 3 in a 12px box)
