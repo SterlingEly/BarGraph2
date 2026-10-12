@@ -21,7 +21,7 @@
 #define GAP_PX        8
 
 // TEMP TEST: force a worst-case-width date ("Wed, Dec 30"). Set to 0 to use the real date.
-#define DEBUG_FIXED_DATE 1
+#define DEBUG_FIXED_DATE 0
 
 // Fonts: 1 = built-in Pebble fonts (no resources needed), 0 = custom Arial (FONT_ARIAL_11/18)
 // NOTE: Leco only has real letters on newer firmware (flint, emery, gabbro). On aplite,
