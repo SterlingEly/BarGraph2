@@ -1,7 +1,7 @@
 #include <pebble.h>
 
 // ============================================================
-// Bar Graph 2 — main.c  v2.24
+// Bar Graph 2 — main.c  v2.24-test (minute digits regular weight, hours bold)
 // Layout approved on all platforms (v2.22). v2.23 adds the full color model:
 //   background, date, hour/minute digits, hour/minute lines,
 //   hour/minute filled bar, hour/minute unfilled track.
@@ -32,6 +32,7 @@
   #if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_GABBRO)
     // Large screens (emery 200x228 LOCKED, gabbro 260x260): one size up from the small platforms.
     #define LABEL_FONT_KEY  FONT_KEY_GOTHIC_18_BOLD
+    #define LABEL_FONT_KEY_M FONT_KEY_GOTHIC_18   // TEST: regular weight for minute digits
     #define DATE_FONT_KEY   FONT_KEY_LECO_26_BOLD_NUMBERS_AM_PM
     #define DATE_Y_ADJ       0
     #define LABEL_LH        22
@@ -43,6 +44,7 @@
   #else
     // 144x168 (aplite, basalt, diorite, flint) and chalk (180x180)
     #define LABEL_FONT_KEY  FONT_KEY_GOTHIC_14_BOLD   // or FONT_KEY_GOTHIC_14
+    #define LABEL_FONT_KEY_M FONT_KEY_GOTHIC_14       // TEST: regular weight for minute digits
     #define LABEL_LH        16
     #define LABEL_DY         1   // measured in simulator: digit centers land exactly on tick lines
     #define ROUND_DATE_BOX  25   // vertical extent of the date below the bars (chalk)
@@ -152,6 +154,7 @@ static Pal prv_pal(void) {
 static Window  *s_window;
 static Layer   *s_canvas_layer;
 static GFont    s_font_label;
+static GFont    s_font_label_m;   // minute digits (TEST: regular weight)
 static GFont    s_font_date;
 static bool     s_custom_fonts = false;
 static int      s_hour   = 0;
@@ -298,7 +301,7 @@ static void draw_rect(GContext *ctx, int w, int h) {
       int ly = ty - lh / 2 - LABEL_DY;
       if (ly + lh < bar_top - lh || ly > bar_bot + lh) continue;
       snprintf(buf, sizeof(buf), "%02d", i * 5);
-      graphics_draw_text(ctx, buf, s_font_label,
+      graphics_draw_text(ctx, buf, s_font_label_m,
         GRect(m_label_x, ly, m_label_w, lh),
         GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
     }
@@ -427,7 +430,7 @@ static void draw_round(GContext *ctx, int w, int h) {
       int ty = bar_bot - slot_h * i;
       int ly = ty - lh / 2 - LABEL_DY;
       snprintf(buf, sizeof(buf), "%02d", i * 5);
-      graphics_draw_text(ctx, buf, s_font_label,
+      graphics_draw_text(ctx, buf, s_font_label_m,
         GRect(cx + c, ly, lab_w + 4, lh),
         GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
     }
@@ -511,14 +514,17 @@ static void init(void) {
   prv_load_settings();
 #if USE_SYSTEM_FONTS
   s_font_label   = fonts_get_system_font(LABEL_FONT_KEY);
+  s_font_label_m = fonts_get_system_font(LABEL_FONT_KEY_M);
   s_font_date    = fonts_get_system_font(DATE_FONT_KEY);
   s_custom_fonts = false;
 #elif defined(RESOURCE_ID_FONT_ARIAL_11)
   s_font_label   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ARIAL_11));
+  s_font_label_m = s_font_label;
   s_font_date    = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ARIAL_18));
   s_custom_fonts = true;
 #else
   s_font_label   = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+  s_font_label_m = s_font_label;
   s_font_date    = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
   s_custom_fonts = false;
 #endif
