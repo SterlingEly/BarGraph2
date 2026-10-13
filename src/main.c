@@ -1,7 +1,7 @@
 #include <pebble.h>
 
 // ============================================================
-// Bar Graph 2 — main.c  v2.23
+// Bar Graph 2 — main.c  v2.24
 // Layout approved on all platforms (v2.22). v2.23 adds the full color model:
 //   background, date, hour/minute digits, hour/minute lines,
 //   hour/minute filled bar, hour/minute unfilled track.
@@ -205,7 +205,7 @@ static void draw_rect(GContext *ctx, int w, int h) {
   int bar_top = bar_bot - bar_h;
 
   int max_h = show24 ? 24 : 12;
-  int dh    = show24 ? s_hour : (s_hour % 12);
+  int dh    = show24 ? s_hour : (s_hour % 12 == 0 ? 12 : s_hour % 12);  // 12 o'clock = full bar
   int hfill = show24 ? (bar_h * dh / 24) : (slot_h * dh);
   int mfill = (slot_h * s_minute) / 5;
 
@@ -360,7 +360,7 @@ static void draw_round(GContext *ctx, int w, int h) {
   int date_y  = bar_bot + dgap + DATE_Y_ADJ;
 
   int max_h  = show24 ? 24 : 12;
-  int dh     = show24 ? s_hour : (s_hour % 12);
+  int dh     = show24 ? s_hour : (s_hour % 12 == 0 ? 12 : s_hour % 12);  // 12 o'clock = full bar
   int hfill  = show24 ? (bar_h * dh / 24) : (slot_h * dh);
   int mfill  = (slot_h * s_minute) / 5;
   int h_fill_top = bar_bot - hfill;
