@@ -1,24 +1,24 @@
 #include <pebble.h>
 
 // ============================================================
-// Bar Graph 2 — main.c  v2.24-test (minute digits regular weight, hours bold)
+// Bar Graph 2 — main.c  v2.27
 // Layout approved on all platforms (v2.22). v2.23 adds the full color model:
 //   background, date, hour/minute digits, hour/minute lines,
 //   hour/minute filled bar, hour/minute unfilled track.
 // Black-and-white watches use Invert + an optional unfilled track.
+// Horizontal layout is derived from a unit u (UNIT_PX) and the measured number width n (NUM_PX = width of "00").
+// Rect:  margin u | number n | space u/2 | nub u/2 | BAR | center u | BAR | nub u/2 | space u/2 | number n | margin u
+//   bars split the remainder: bar = (w - 5u - 2n) / 2; an odd leftover pixel goes to the center gap.
+// Round: the top graduation line's outer tick (rim to bar) is ROUND_TOP_TICK_HALVES half-units long; the rest of the ticks run to the rim.
+//   centre column = bar | u/2 | number n | u | number n | u/2 | bar, so bar width = what is left between those two.
 // ============================================================
 
 #define SETTINGS_KEY 2   // v2.23: new color model. Key 1 held the old layout and is abandoned.
 
 #define V1_BAR_BOT  140
 #define V1_BAR_TOP    8
-#define V1_HX        38
-#define V1_BAR_W     30
-#define V1_MX        76
 #define V1_DATE_Y   143   // aplite: margins top 4 / bar-to-date 6 / bottom 4
 #define V1_SLOT_H    11
-#define NUB_PX        8
-#define GAP_PX        8
 
 // TEMP TEST: force a worst-case-width date ("Wed, Dec 30"). Set to 0 to use the real date.
 #define DEBUG_FIXED_DATE 0
@@ -32,7 +32,8 @@
   #if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_GABBRO)
     // Large screens (emery 200x228 LOCKED, gabbro 260x260): one size up from the small platforms.
     #define LABEL_FONT_KEY  FONT_KEY_GOTHIC_18_BOLD
-    #define LABEL_FONT_KEY_M FONT_KEY_GOTHIC_18   // TEST: regular weight for minute digits
+    #define UNIT_PX         14   // layout unit (emery, gabbro)
+    #define NUM_PX          14   // measured width of "00"
     #define DATE_FONT_KEY   FONT_KEY_LECO_26_BOLD_NUMBERS_AM_PM
     #define DATE_Y_ADJ       0
     #define LABEL_LH        22
@@ -44,7 +45,8 @@
   #else
     // 144x168 (aplite, basalt, diorite, flint) and chalk (180x180)
     #define LABEL_FONT_KEY  FONT_KEY_GOTHIC_14_BOLD   // or FONT_KEY_GOTHIC_14
-    #define LABEL_FONT_KEY_M FONT_KEY_GOTHIC_14       // TEST: regular weight for minute digits
+    #define UNIT_PX         12   // layout unit (144x168 rect, chalk)
+    #define NUM_PX          11   // measured width of "00"
     #define LABEL_LH        16
     #define LABEL_DY         1   // measured in simulator: digit centers land exactly on tick lines
     #define ROUND_DATE_BOX  25   // vertical extent of the date below the bars (chalk)
@@ -63,17 +65,19 @@
     #endif
   #endif
 #else
+  #define UNIT_PX           12
+  #define NUM_PX            11
   #define LABEL_LH          16
   #define LABEL_DY           1   // Arial 11 in a 16px box (was 3 in a 12px box)
   #define DATE_Y_ADJ         0
   #define ROUND_DATE_BOX    25
 #endif
 
-// Round layout: all sizes below are for a 180px-wide screen and scale with width.
-#define ROUND_BAR_W_REF   28   // bar width
-#define ROUND_C_REF        3   // half-gap between hour and minute label columns
-#define ROUND_PAD_REF      5   // gap between label column and bar
+// Round layout
 #define ROUND_SHIFT_Y      2   // nudge the whole block down (px)
+// Length of the top line's outer tick (rim -> bar) in half-units: 0 = bar corner at the rim, 1 = u/2, 2 = u.
+// Sets the bar width. chalk: 0 -> 27px, 1 -> 21px, 2 -> 15px.  gabbro: 0 -> 50px, 1 -> 43px, 2 -> 36px.
+#define ROUND_TOP_TICK_HALVES 0
 
 #if defined(PBL_ROUND)
 static int prv_isqrt(int n) {
@@ -154,7 +158,6 @@ static Pal prv_pal(void) {
 static Window  *s_window;
 static Layer   *s_canvas_layer;
 static GFont    s_font_label;
-static GFont    s_font_label_m;   // minute digits (TEST: regular weight)
 static GFont    s_font_date;
 static bool     s_custom_fonts = false;
 static int      s_hour   = 0;
@@ -187,9 +190,14 @@ static void draw_rect(GContext *ctx, int w, int h) {
   bool show24 = s_settings.Show24h;
   Pal pal = prv_pal();
 
-  int hx      = (V1_HX      * w) / 144;
-  int bw      = (V1_BAR_W   * w) / 144;
-  int mx      = (V1_MX      * w) / 144;
+  // Horizontal system (see header): everything is a multiple of u; bars take the remainder.
+  int u       = UNIT_PX;
+  int n       = NUM_PX;
+  int nub     = u - u / 2;                   // nub length (gets the odd pixel when u is odd)
+  int bw      = (w - 5 * u - 2 * n) / 2;
+  int center  = u + (w - 5 * u - 2 * n - 2 * bw);   // odd leftover pixel goes to the center gap
+  int hx      = 2 * u + n;                   // margin + number + space + nub
+  int mx      = hx + bw + center;
 #if defined(PBL_PLATFORM_EMERY) && USE_SYSTEM_FONTS
   int bar_bot = EMERY_BAR_BOT;
   int slot_h  = EMERY_SLOT_H;
@@ -202,7 +210,6 @@ static void draw_rect(GContext *ctx, int w, int h) {
 
   date_y += DATE_Y_ADJ;
   if (slot_h < 2) slot_h = 2;
-  if (bw < 20) bw = 20;
 
   int bar_h   = slot_h * 12;
   int bar_top = bar_bot - bar_h;
@@ -215,8 +222,8 @@ static void draw_rect(GContext *ctx, int w, int h) {
   int h_fill_top = bar_bot - hfill;  // top of hour fill (bar_bot when hfill=0)
   int m_fill_top = bar_bot - mfill;  // top of minute fill
 
-  int h_label_w = hx - NUB_PX - GAP_PX;
-  int m_label_x = mx + bw + NUB_PX + GAP_PX;
+  int h_label_w = hx - u;         // right edge of hour numbers = margin u + number n
+  int m_label_x = mx + bw + u;    // left edge of minute numbers
   int m_label_w = w - m_label_x;
   int lh = LABEL_LH;
 
@@ -236,15 +243,15 @@ static void draw_rect(GContext *ctx, int w, int h) {
     int ty = bar_bot - slot_h * i;
     graphics_context_set_stroke_color(ctx, pal.hline);
     graphics_draw_line(ctx, GPoint(hx,           ty), GPoint(hx + bw - 1,           ty));
-    graphics_draw_line(ctx, GPoint(hx - NUB_PX,  ty), GPoint(hx - 1,                ty));
+    graphics_draw_line(ctx, GPoint(hx - nub,     ty), GPoint(hx - 1,                ty));
     graphics_context_set_stroke_color(ctx, pal.mline);
     graphics_draw_line(ctx, GPoint(mx,           ty), GPoint(mx + bw - 1,           ty));
-    graphics_draw_line(ctx, GPoint(mx + bw,      ty), GPoint(mx + bw + NUB_PX - 1, ty));
+    graphics_draw_line(ctx, GPoint(mx + bw,      ty), GPoint(mx + bw + nub - 1,    ty));
   }
 
   // ---- 2. Top/bottom border lines ----
-  draw_bar_borders(ctx, hx, bw, bar_top, bar_bot, true,  false, NUB_PX, pal.hline);
-  draw_bar_borders(ctx, mx, bw, bar_top, bar_bot, false, true,  NUB_PX, pal.mline);
+  draw_bar_borders(ctx, hx, bw, bar_top, bar_bot, true,  false, nub, pal.hline);
+  draw_bar_borders(ctx, mx, bw, bar_top, bar_bot, false, true,  nub, pal.mline);
 
   // ---- 3. Bar fills (cover tick lines in filled region) ----
   if (hfill > 0) {
@@ -301,7 +308,7 @@ static void draw_rect(GContext *ctx, int w, int h) {
       int ly = ty - lh / 2 - LABEL_DY;
       if (ly + lh < bar_top - lh || ly > bar_bot + lh) continue;
       snprintf(buf, sizeof(buf), "%02d", i * 5);
-      graphics_draw_text(ctx, buf, s_font_label_m,
+      graphics_draw_text(ctx, buf, s_font_label,
         GRect(m_label_x, ly, m_label_w, lh),
         GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
     }
@@ -341,17 +348,7 @@ static void draw_round(GContext *ctx, int w, int h) {
   Pal pal = prv_pal();
 
   int lh = LABEL_LH;
-  // Width of a two-digit label in the chosen font, measured at runtime
-  GSize lsz = graphics_text_layout_get_content_size("00", s_font_label,
-                GRect(0, 0, 100, 40), GTextOverflowModeWordWrap, GTextAlignmentLeft);
-  int lab_w = lsz.w;
-
-  int bw  = (ROUND_BAR_W_REF * w) / 180;
-  int c   = (ROUND_C_REF     * w) / 180;
-  int pad = (ROUND_PAD_REF   * w) / 180;
-  if (c < 2) c = 2;
-  int hx  = cx - c - lab_w - pad - bw;
-  int mx  = cx + c + lab_w + pad;
+  int u = UNIT_PX, n = NUM_PX;
 
   int slot_h = ((h * 2) / 3) / 12;
   if (slot_h < 2) slot_h = 2;
@@ -361,6 +358,17 @@ static void draw_round(GContext *ctx, int w, int h) {
   int bar_top = (h - total) / 2 + ROUND_SHIFT_Y;
   int bar_bot = bar_top + bar_h;
   int date_y  = bar_bot + dgap + DATE_Y_ADJ;
+
+  // Horizontal system: the top line's outer tick (rim -> bar) is ROUND_TOP_TICK_HALVES * u/2 long, which fixes the bar's outer edge.
+  // Centre column (bar | u/2 | n | u | n | u/2 | bar) fixes the inner edge.
+  int dy_top   = bar_top - cy;
+  int chord_top = (dy_top*dy_top < r*r) ? prv_isqrt(r*r - dy_top*dy_top) : 0;
+  int rim_l    = cx - chord_top + 2;               // same 2px rim inset as prv_round_line
+  int hx       = rim_l + (u * ROUND_TOP_TICK_HALVES) / 2;
+  int half_u   = u / 2;
+  int bw       = (cx - half_u - n - half_u) - hx;  // inner edge of hour bar = cx - (u + n)
+  if (bw < 4) bw = 4;
+  int mx       = cx + half_u + n + half_u;
 
   int max_h  = show24 ? 24 : 12;
   int dh     = show24 ? s_hour : (s_hour % 12 == 0 ? 12 : s_hour % 12);  // 12 o'clock = full bar
@@ -422,7 +430,7 @@ static void draw_round(GContext *ctx, int w, int h) {
       int ly = ty - lh / 2 - LABEL_DY;
       snprintf(buf, sizeof(buf), "%02d", i);
       graphics_draw_text(ctx, buf, s_font_label,
-        GRect(cx - c - lab_w - 4, ly, lab_w + 4, lh),
+        GRect(cx - half_u - n - 4, ly, n + 4, lh),
         GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
     }
     graphics_context_set_text_color(ctx, pal.mdig);
@@ -430,8 +438,8 @@ static void draw_round(GContext *ctx, int w, int h) {
       int ty = bar_bot - slot_h * i;
       int ly = ty - lh / 2 - LABEL_DY;
       snprintf(buf, sizeof(buf), "%02d", i * 5);
-      graphics_draw_text(ctx, buf, s_font_label_m,
-        GRect(cx + c, ly, lab_w + 4, lh),
+      graphics_draw_text(ctx, buf, s_font_label,
+        GRect(cx + half_u, ly, n + 4, lh),
         GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
     }
   }
@@ -514,17 +522,14 @@ static void init(void) {
   prv_load_settings();
 #if USE_SYSTEM_FONTS
   s_font_label   = fonts_get_system_font(LABEL_FONT_KEY);
-  s_font_label_m = fonts_get_system_font(LABEL_FONT_KEY_M);
   s_font_date    = fonts_get_system_font(DATE_FONT_KEY);
   s_custom_fonts = false;
 #elif defined(RESOURCE_ID_FONT_ARIAL_11)
   s_font_label   = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ARIAL_11));
-  s_font_label_m = s_font_label;
   s_font_date    = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ARIAL_18));
   s_custom_fonts = true;
 #else
   s_font_label   = fonts_get_system_font(FONT_KEY_GOTHIC_14);
-  s_font_label_m = s_font_label;
   s_font_date    = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
   s_custom_fonts = false;
 #endif
