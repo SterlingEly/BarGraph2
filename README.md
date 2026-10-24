@@ -2,7 +2,7 @@
 
 A Pebble watchface displaying time as two vertical bar graphs — hours on the left, minutes on the right — with labeled tick marks.
 
-**Current status:** In development, **internal v2.27** (2026-10-16). Layouts for all platforms were approved on 2026-10-12 (v2.22), the hierarchical color model with presets and a palette picker landed in v2.23, and v2.24–v2.27 refined the hour bar, the digit weight and the unit-based horizontal layout. Not yet submitted to the app store; the public release will be numbered 2.0 (the internal number is separate).
+**Current status:** In development, **internal v2.27** (2026-10-16). Layouts for all platforms were approved on 2026-10-12 (v2.22), the hierarchical color model with presets and a palette picker landed in v2.23, and v2.24–v2.27 refined the hour bar, the digit weight and the unit-based horizontal layout. Not yet submitted to the app store; the public release will be numbered 2.0 (the internal number is separate). [`STORE_LISTING.md`](STORE_LISTING.md) holds its store listing (while unpublished the file is the listing; once published, edits become update drafts).
 
 > **AI collaborators and technical contributors:** Read [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) before making any code changes. It contains the authoritative architecture reference, build rules, known traps, and current TODO.
 
@@ -88,7 +88,7 @@ See [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) for full build rules, CloudPebble
 |------------|---------|
 | [Radium 2](https://github.com/SterlingEly/Radium2) | Radial time display; released on Rebble store |
 | [TallBoy](https://github.com/SterlingEly/TallBoy) | Oversized vector-drawn digits; all platforms |
-| [Monogram](https://github.com/SterlingEly/Monogram) | Custom monogram-style digit watchface; early development |
+| [Monogram](https://github.com/SterlingEly/Monogram) | Custom monogram-style digit watchface — **deferred** (2026-10-24); superseded by TallBoy on round |
 | [Pixel Sampler](https://github.com/SterlingEly/PixelSampler) | Developer reference app for Pebble fonts, colors, and platform capabilities |
 
 ---
