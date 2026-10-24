@@ -1,8 +1,8 @@
 # Bar Graph 2
 
-A Pebble watchface displaying time as two vertical bar graphs — hours on the left, minutes on the right — with labeled tick marks and an optional battery/step ring.
+A Pebble watchface displaying time as two vertical bar graphs — hours on the left, minutes on the right — with labeled tick marks.
 
-**Current status:** In development. Aplite/diorite/flint layout locked at v2.12. Emery, basalt, and round platforms pending. Not yet submitted to the app store.
+**Current status:** In development, **internal v2.27** (2026-10-16). Layouts for all platforms were approved on 2026-10-12 (v2.22), the hierarchical color model with presets and a palette picker landed in v2.23, and v2.24–v2.27 refined the hour bar, the digit weight and the unit-based horizontal layout. Not yet submitted to the app store; the public release will be numbered 2.0 (the internal number is separate).
 
 > **AI collaborators and technical contributors:** Read [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) before making any code changes. It contains the authoritative architecture reference, build rules, known traps, and current TODO.
 
@@ -23,10 +23,10 @@ It's a watchface that looks like data visualization, because it is.
 - **Hour bar (left) and minute bar (right)** with labeled tick marks
 - **Tick separators** visible through both filled and unfilled bar regions
 - **12h and 24h** display modes
-- **Outer ring** — battery level (right half) and step count (left half) — reserved for future release
-- **Configurable colors** for bars, labels, and ring segments
+- **Configurable colors** — hierarchical color settings with presets and a palette picker (v2.23), including an unfilled track and per-bar colors
 - **B&W invert** option for aplite/diorite/flint
-- **All 7 platforms** — Aplite, Basalt, Chalk, Diorite, Emery, Flint, Gabbro
+- **All 7 platforms** — Aplite, Basalt, Chalk, Diorite, Emery, Flint, Gabbro, with a center-column label layout on the round screens
+- **No battery/step ring** in current builds. The ring settings keys are reserved only; Sterling is leaning against a ring (2026-10-12) and is weighing small side-gutter bars or wider bars instead.
 
 ---
 
@@ -37,10 +37,10 @@ It's a watchface that looks like data visualization, because it is.
 | Aplite   | Pebble Classic / Steel | 144×168 | B&W |
 | Basalt   | Pebble Time / Steel | 144×168 | Color |
 | Chalk    | Pebble Time Round | 180×180 | Color, round |
-| Diorite  | Pebble 2 SE | 144×168 | B&W |
+| Diorite  | Pebble 2 (SE and HR) | 144×168 | B&W |
 | Emery    | Pebble Time 2 | 200×228 | Color, hi-res |
-| Flint    | Pebble 2 | 144×168 | B&W |
-| Gabbro   | Pebble Round 2 | 260×260 | Color, round |
+| Flint    | Pebble 2 Duo | 144×168 | B&W |
+| Gabbro   | Pebble Round 2 | 260×260 | Color, round, touchscreen |
 
 ---
 
@@ -54,12 +54,12 @@ Cameron MacFarland built the original implementation.
 - Early version: [distantcam/pebble](https://github.com/distantcam/pebble) (April 2013)
 - Full release: [distantcam/Watchface-BarGraph](https://github.com/distantcam/Watchface-BarGraph) (August 2013 – March 2014)
 
-**March 5, 2014 — v1.0 app store release**
-Published to the Pebble App Store.
+**February–March 2014 — v1 app store listing**
+Listed in the Pebble App Store after the SDK 2.0 port (store record created 2014-02-20); the configurable-invert update (v2.1.1) followed on 2014-03-05.
 Appstore: [apps.repebble.com](https://apps.repebble.com/en_US/application/5305a587b704cb4e7d0000e5) · [apps.rebble.io](https://apps.rebble.io/en_US/application/5305a587b704cb4e7d0000e5)
 
 **March 2026 — Bar Graph 2 (Sterling Ely & Claude)**
-A full rebuild for all modern Pebble platforms, forked from [distantcam/Watchface-BarGraph](https://github.com/distantcam/Watchface-BarGraph). Sterling Ely led design and direction; Claude (Anthropic) handled technical implementation. Adds color support, configurable ring, 12h/24h mode, tick separators through bar fill, and round platform support.
+A full rebuild for all modern Pebble platforms, forked from [distantcam/Watchface-BarGraph](https://github.com/distantcam/Watchface-BarGraph). Sterling Ely led design and direction; Claude (Anthropic) handled technical implementation. Adds a color model with presets, 12h/24h mode, tick separators through bar fill, and round platform support.
 
 ---
 
