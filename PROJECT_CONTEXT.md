@@ -17,7 +17,7 @@ The original Bar Graph v1 was designed by Sterling Ely and implemented by Camero
 
 ## Current Status
 
-> **Live state — update this section as work progress.**
+> **Live state — update this section as work progresses.**
 
 - **NOT YET SUBMITTED to app store**
 - **Internal version v2.27** (2026-10-16). The public release will be numbered 2.0; internal numbers are separate from public releases, and `appinfo.json` still says `versionLabel 2.0`.
@@ -27,6 +27,7 @@ The original Bar Graph v1 was designed by Sterling Ely and implemented by Camero
 - **2026-10-13 (v2.24):** the hour bar is full at 12 o'clock (hour % 12 == 0 now maps to 12). A TEST commit the same night put regular-weight minute digits next to bold hour digits for comparison.
 - **2026-10-16 (v2.27):** all-bold digits restored; unit-based horizontal layout (u=12 on low-res, 14 on emery/gabbro); round top tick setting.
 - Not yet compiled-and-device-checked by the assistant on every platform; Sterling's visual checks drove the layout approvals above.
+- **Store listing:** `STORE_LISTING.md` is current through v2.27 and, while the face is unpublished, *is* the listing (no "draft" label; Sterling, 2026-10-24). Once published, edits to it become update drafts. New listings and update drafts start from the live Radium 2 repebble listing (https://apps.repebble.com/radium-2_69a6531826cc4f0009c65926).
 - Branch: `master`
 
 ### Development plan (in order)
@@ -40,7 +41,7 @@ Status as recorded in the commit history; the 2026-10-12 "all platforms approved
 | 3 | basalt | 144×168, color | ✅ Layout approved at v2.22 |
 | 4 | chalk / gabbro | 180×180 / 260×260, round | ✅ Layout approved at v2.22 (center-column labels, v2.20); gabbro unit width 14 at v2.27 |
 | 5 | Config page | — | 🟨 Color config implemented at v2.23; needs end-to-end verification on device |
-| 6 | Store submission | — | ⬜ Not started (a draft listing exists; see TODO) |
+| 6 | Store submission | — | ⬜ Not started (the listing in `STORE_LISTING.md` is written; screenshots and banner are not) |
 
 ---
 
@@ -61,6 +62,7 @@ Sterling makes all product and design decisions. AI proposes and implements; Ste
 SterlingEly/BarGraph2 (master)
 ├── PROJECT_CONTEXT.md     ← authoritative technical reference (this file)
 ├── README.md              ← human-facing overview
+├── STORE_LISTING.md       ← store listing (unpublished: the file is the listing); current through v2.27
 ├── appinfo.json           ← message keys as appKeys{} object
 └── src/
     ├── main.c             ← entire watchface C source
@@ -69,7 +71,7 @@ SterlingEly/BarGraph2 (master)
         └── index.js       ← PebbleKit JS: settings relay + localStorage persistence
 ```
 
-(The repo may also hold `STORE_LISTING.md` and `docs/VERSIONING.md`; a listing check is in the TODO.)
+(The repo may also hold `docs/VERSIONING.md`; check the live tree if it matters.)
 
 **Critical path rule:** Source must live at `src/main.c` (flat). Do not use `src/c/main.c`. CloudPebble import fails if two `main.c` files exist at different paths.
 
@@ -91,10 +93,11 @@ SterlingEly/BarGraph2 (master)
 ### GitHub MCP
 
 - `push_files` silently empties file content — **never use it**. Use `create_or_update_file` with full inline content.
-- Always fetch a fresh SHA via `get_file_contents` before any `create_or_update_file` call — SHAs from prior sessions are stale after any intervening commit.
-- `get_file_contents` times out on files above ~15KB.
+- Always fetch a fresh SHA via `get_file_contents` before any `create_or_update_file` call — SHAs from prior sessions are stale after any intervening commit. Pass the full 40-character SHA (a truncated one is rejected).
+- `get_file_contents` times out on files above ~15KB in some sessions; larger files work in others, so retry before falling back.
 - "Deleting" a file via MCP produces a zero-byte blob. Actual deletion requires the GitHub web UI trash icon.
 - Release tags cannot be created via MCP — manual web UI step only.
+- Claude's commit subjects start with the Codex provenance prefix `[claude]`.
 
 ### JS config
 
@@ -251,7 +254,7 @@ Code uses `#ifdef RESOURCE_ID_FONT_ARIAL_10` to fall back to system fonts if Ari
 2. ⬜ Config page — verify the v2.23 color presets, palette picker, toggles and step goal end to end on device (the step-goal setting and the ring keys are baseline leftovers; see item 4).
 3. ⬜ Dim track — the v2.23 color model includes an unfilled track in code; confirm it matches the v1-faithful default on B&W and decide the color defaults.
 4. ⬜ Battery/step ring — decision (Sterling, 2026-10-12, leaning): probably **no ring**; he is considering two small vertical bars in the side gutters, or widening the graph into the gutters. `ShowRing` is reserved only and nothing is drawn.
-5. ⬜ Store submission — description, screenshots, banner image. `STORE_LISTING.md` (Arlo's 2026-10-12 draft, modeled on Radium 2) needs Sterling/Claude review; `appinfo.json` `versionLabel` is still `2.0`, which matches the planned public number.
+5. ⬜ Store submission — `STORE_LISTING.md` is written and current through v2.27 (modeled on Radium 2; Arlo's 2026-10-12 first pass, updated and re-framed by Claude 2026-10-24); screenshots and banner image are still to do. `appinfo.json` `versionLabel` is still `2.0`, which matches the planned public number. Collapse the internal release notes into one public launch note at submission.
 
 ---
 
@@ -277,7 +280,7 @@ Other Pebble watchface repositories by Sterling Ely:
 |------------|-----|--------------|
 | **Radium 2** | https://github.com/SterlingEly/Radium2 | Sibling watchface; radial time display; most feature-complete; public v2.3.1 on the Rebble store, v2.4 in development. Bar Graph 2 shares CloudPebble build patterns and JS config architecture with Radium 2. |
 | **TallBoy** | https://github.com/SterlingEly/TallBoy | Sibling watchface; oversized vector-drawn digits; all-platform; advanced health, weather, and solar data. |
-| **Monogram** | https://github.com/SterlingEly/Monogram | Sibling watchface; custom monogram-style digit assets; early development; targets gabbro (Pebble Round 2). |
+| **Monogram** | https://github.com/SterlingEly/Monogram | Sibling watchface concept; custom monogram-style digit assets. **Deferred 2026-10-24** (TallBoy on round covers about 90% of the intent; repo kept). |
 | **Pixel Sampler** | https://github.com/SterlingEly/PixelSampler | Developer reference app; browser for Pebble system fonts, colors, and platform capabilities; released on Rebble store. |
 
 **v1 original source (reference only):**
@@ -301,6 +304,7 @@ Bar Graph 2 is forked from distantcam/Watchface-BarGraph. The v1 source was the 
 | CloudPebble | https://cloudpebble.repebble.com |
 | Arial font source | https://github.com/distantcam/Watchface-BarGraph/blob/master/resources/fonts/arial.ttf |
 | Open-Meteo API (weather, if added) | https://open-meteo.com |
+| Live Radium 2 repebble listing (store-copy template) | https://apps.repebble.com/radium-2_69a6531826cc4f0009c65926 |
 
 ---
 
@@ -315,4 +319,5 @@ Bar Graph 2 is forked from distantcam/Watchface-BarGraph. The v1 source was the 
 
 ## Last Updated
 
+2026-10-24 (later) — Store listing is no longer called a draft (unpublished: the file is the listing); STORE_LISTING added to the repo tree and TODO 5 refreshed; Monogram row updated to deferred; "as work progress" typo fixed; GitHub MCP full-SHA and `[claude]` prefix notes added.
 2026-10-24 — Brought status, development plan, architecture notes, TODO and unresolved questions up to internal v2.27 (2026-10-16). Earlier: 2026-07-03 documentation standardization; aplite/diorite/flint locked at v2.12.
