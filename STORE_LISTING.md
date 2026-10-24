@@ -1,4 +1,6 @@
-# Bar Graph 2 — Store Listing (DRAFT, updated for v2.27 — 2026-10-24)
+# Bar Graph 2 — Store Listing
+
+> **Not yet published.** While Bar Graph 2 is unpublished, this file *is* the listing (current through v2.27). Once it is published, edits to this file become update drafts for the next release. Open pre-release items are under "Notes" at the bottom.
 
 ## Name
 Bar Graph 2
@@ -66,12 +68,13 @@ The color update:
 
 ---
 
-## Drafting notes (not part of the listing — for Sterling/Claude)
+## Notes (not part of the listing — for Sterling/Claude)
 
+- **Template:** new listings and future update drafts start from the live Radium 2 listing on repebble (https://apps.repebble.com/radium-2_69a6531826cc4f0009c65926): tagline, description, features, platforms, credits, feedback line. It is the best listing so far, not a perfect one. The repo copy at `SterlingEly/Radium2` STORE_LISTING.md mirrors it.
+- **Status of this file:** unpublished, so no "DRAFT" label (Sterling, 2026-10-24). After publication this file holds update drafts only.
 - **Framing (decided 2026-10-24):** follows the Radium 2 pattern. Bar Graph was designed by Sterling years ago, implemented by others, and has now been fully rebuilt and expanded by Sterling & Claude. The credits timeline carries the attribution.
 - **No ring:** `main.c` has no ring, battery, or steps code, and Sterling leans toward no ring (2026-10-12). The listing makes no ring claim.
 - **Version label:** `appinfo.json` says `versionLabel: 2.0`, the planned public number. Release Notes use internal labels (v2.23, v2.24, v2.27), following the Codex versioning rule. Collapse them into a single public launch note at submission.
 - **Platforms:** all 7 platform layouts were approved on device at v2.22 (2026-10-12); v2.24 and v2.27 changed the hour-bar and horizontal layout since. Re-confirm on device before submitting.
 - **Not yet submitted** to the Rebble store; no store link exists.
 - Release notes for v2.24 and v2.27 are drafted from the repo changelog and PROJECT_CONTEXT; adjust wording to taste.
-- Modeled on `SterlingEly/Radium2` STORE_LISTING.md: Name / Short Description / Full Description with FEATURES + PLATFORMS blocks / credits timeline / feedback line / Release Notes.
